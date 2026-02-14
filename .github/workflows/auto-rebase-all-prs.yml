@@ -1,36 +1,24 @@
-name: Force Overwrite All PR Branches
+name: Auto Rebase All PRs
 
 on:
-  workflow_dispatch: {}
   schedule:
-    - cron: '0 0 * * *'  # 可选：每天一次（按需改或删除）
-
-# 如果 workflow 需要写入仓库（如 force-push），显式声明权限，避免因默认权限不足导致运行失败
-permissions:
-  contents: write
+    - cron: '0 * * * *' # Runs every hour
 
 jobs:
-  force_overwrite:
+  rebase:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-      - name: Setup Git user
+      - name: Fetch PRs
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          gh pr list --state open --json number --jq '.[].number' > pr_numbers.txt
 
-      - name: Install gh and jq
-        run: sudo apt-get update && sudo apt-get install -y gh jq
-
-      - name: Get all open PRs from the same repo owner
-        id: list_prs
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Rebase PRs
         run: |
-          OWNER="${{ github.repository_owner }}"
-          gh pr list --state open --json number,headRefName,headRepositoryOwner |
-            jq -r --arg owner "$OWNER" '.[] | select(.headRepositoryOwner.login==$owner) | "\(.number) \(.headRefName)"' > pr_list.txt || true
+          while read number; do
+            gh pr checkout $number
+            git rebase main
+            git push origin HEAD:refs/pull/$number/merge --force
+          done < pr_numbers.txt
