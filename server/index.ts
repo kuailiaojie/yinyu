@@ -1,108 +1,199 @@
-import express from 'express';
-import type { Request, Response } from 'express';
-import { mapToMusicItem, type ParseRecord } from './mappings';
-import type { Platform } from '../src/features/search/types';
+import express, { Request, Response } from 'express';
 
 const app = express();
 app.use(express.json());
 
-const API_BASE = process.env.TUNE_API_BASE ?? 'https://tunehub.sayqz.com/api';
-const API_KEY = process.env.TUNE_API_KEY ?? '';
-const ttl = Number(process.env.CACHE_TTL_MS ?? 30_000);
-const perMinute = Number(process.env.RATE_LIMIT_PER_MINUTE ?? 60);
+const TUNEHUB_API_BASE = process.env.TUNEHUB_API_BASE ?? 'https://tunehub.sayqz.com/api';
+const TUNEHUB_API_KEY = process.env.TUNEHUB_API_KEY ?? '';
 
-const cache = new Map<string, { expires: number; data: unknown }>();
-const rate = new Map<string, { c: number; reset: number }>();
-
-app.use((req, res, next) => {
-  const ip = req.ip || 'local';
-  const now = Date.now();
-  const s = rate.get(ip) ?? { c: 0, reset: now + 60_000 };
-  if (now > s.reset) {
-    s.c = 0;
-    s.reset = now + 60_000;
-  }
-  s.c += 1;
-  rate.set(ip, s);
-  if (s.c > perMinute) return res.status(429).json({ error: 'Too Many Requests' });
-  next();
-});
-
-async function cached<T>(key: string, fn: () => Promise<T>): Promise<T> {
-  const hit = cache.get(key);
-  if (hit && hit.expires > Date.now()) return hit.data as T;
-  const data = await fn();
-  cache.set(key, { expires: Date.now() + ttl, data });
-  return data;
+interface MethodConfig {
+  type: 'http';
+  method: 'GET' | 'POST';
+  url: string;
+  params?: Record<string, unknown>;
+  body?: Record<string, unknown>;
+  headers?: Record<string, string>;
+  transform?: string;
 }
 
-async function tuneRequest(path: string, init?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-Key': API_KEY,
-      ...(init?.headers ?? {})
+interface ParseRecord {
+  id: string;
+  name: string;
+  artists: string[];
+  album?: string;
+}
+
+interface MusicItem {
+  id: string;
+  title: string;
+  artist: string;
+  album?: string;
+  platform: string;
+}
+
+function replaceTemplateVariables(value: unknown, vars: Record<string, string>): unknown {
+  if (typeof value === 'string') {
+    let out = value;
+    for (const [k, v] of Object.entries(vars)) {
+      out = out.replaceAll(`{{${k}}}`, v);
     }
+    return out;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => replaceTemplateVariables(item, vars));
+  }
+
+  if (value && typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      result[k] = replaceTemplateVariables(v, vars);
+    }
+    return result;
+  }
+
+  return value;
+}
+
+async function fetchMethodConfig(platform: string, fn: string): Promise<MethodConfig> {
+  const configUrl = `${TUNEHUB_API_BASE}/v1/methods/${encodeURIComponent(platform)}/${encodeURIComponent(fn)}`;
+  const response = await fetch(configUrl, {
+    headers: {
+      ...(TUNEHUB_API_KEY ? { 'X-API-Key': TUNEHUB_API_KEY } : {}),
+    },
   });
-  if (!res.ok) throw new Error(`Tune API ${res.status}`);
-  return res.json();
+
+  if (!response.ok) {
+    throw new Error(`failed to fetch method config: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as { data?: MethodConfig };
+  if (!payload?.data?.url || !payload.data.method) {
+    throw new Error('invalid method config response');
+  }
+
+  return payload.data;
+}
+
+function pickArrayCandidates(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== 'object') return [];
+
+  const obj = payload as Record<string, unknown>;
+  const candidates = [obj.items, obj.list, obj.songs, obj.data, obj.result, obj.records];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate;
+    if (candidate && typeof candidate === 'object') {
+      const nested = pickArrayCandidates(candidate);
+      if (nested.length > 0) return nested;
+    }
+  }
+
+  for (const value of Object.values(obj)) {
+    if (Array.isArray(value)) return value;
+  }
+
+  return [];
+}
+
+function toParseRecord(item: unknown): ParseRecord | null {
+  if (!item || typeof item !== 'object') return null;
+  const raw = item as Record<string, unknown>;
+
+  const id = raw.id ?? raw.songid ?? raw.mid ?? raw.rid ?? raw.musicrid;
+  const name = raw.name ?? raw.songname ?? raw.title;
+  const album = raw.album ?? raw.albumname ?? raw.albumName;
+
+  const artistsSource = raw.artists ?? raw.artist ?? raw.singer ?? raw.author;
+  let artists: string[] = [];
+
+  if (Array.isArray(artistsSource)) {
+    artists = artistsSource
+      .map((v) => {
+        if (typeof v === 'string') return v;
+        if (v && typeof v === 'object') {
+          const o = v as Record<string, unknown>;
+          return typeof o.name === 'string' ? o.name : '';
+        }
+        return '';
+      })
+      .filter(Boolean);
+  } else if (typeof artistsSource === 'string') {
+    artists = artistsSource.split(/[\/,;&]/).map((v) => v.trim()).filter(Boolean);
+  }
+
+  if (!id || !name) return null;
+
+  return {
+    id: String(id),
+    name: String(name),
+    artists,
+    album: typeof album === 'string' ? album : undefined,
+  };
+}
+
+function parseRecordToMusicItem(record: ParseRecord, platform: string): MusicItem {
+  return {
+    id: record.id,
+    title: record.name,
+    artist: record.artists.join(' / '),
+    album: record.album,
+    platform,
+  };
 }
 
 app.get('/api/tune/search', async (req: Request, res: Response) => {
   try {
-    const keyword = String(req.query.keyword ?? '');
-    const platforms = String(req.query.platforms ?? 'netease,qq,kuwo').split(',') as Platform[];
+    const platform = String(req.query.platform ?? 'netease');
+    const keyword = String(req.query.keyword ?? '').trim();
+    const page = String(req.query.page ?? '1');
+    const pageSize = String(req.query.pageSize ?? '20');
 
-    const rows = await cached(`s:${keyword}:${platforms.join(',')}`, async () => {
-      const out: ParseRecord[] = [];
-      for (const platform of platforms) {
-        const methods = (await tuneRequest(`/v1/methods/${platform}/search`)) as { data: { url: string } };
-        void methods;
-        const parsed = (await tuneRequest('/v1/parse', {
-          method: 'POST',
-          body: JSON.stringify({ platform, ids: '1974443814', quality: '320k' })
-        })) as { data?: ParseRecord[] };
-        out.push(...(parsed.data ?? []));
+    if (!keyword) {
+      return res.status(400).json({ message: 'keyword is required' });
+    }
+
+    // 1) 获取平台 search 方法配置
+    const methodConfig = await fetchMethodConfig(platform, 'search');
+
+    // 2) 按模板变量规则替换 {{keyword}}/{{page}}/{{pageSize}}
+    const variables = { keyword, page, pageSize };
+    const params = replaceTemplateVariables(methodConfig.params ?? {}, variables) as Record<string, string>;
+    const body = replaceTemplateVariables(methodConfig.body ?? {}, variables) as Record<string, unknown>;
+
+    // 3) 服务端发起真实搜索请求
+    const url = new URL(methodConfig.url);
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null) {
+        url.searchParams.set(k, String(v));
       }
-      return out;
+    }
+
+    const upstreamRes = await fetch(url.toString(), {
+      method: methodConfig.method,
+      headers: methodConfig.headers,
+      body: methodConfig.method === 'POST' ? JSON.stringify(body) : undefined,
     });
 
-    res.json({ items: rows.map((r) => mapToMusicItem((r as any).platform ?? 'netease', r)) });
-  } catch {
-    res.status(502).json({ error: 'Upstream unavailable' });
+    if (!upstreamRes.ok) {
+      return res.status(502).json({ message: `upstream search failed: ${upstreamRes.status}` });
+    }
+
+    const upstreamData = (await upstreamRes.json()) as unknown;
+
+    // 4) 各平台结果统一转换为 ParseRecord，再转换为 MusicItem，并保留平台来源
+    const records = pickArrayCandidates(upstreamData)
+      .map(toParseRecord)
+      .filter((v): v is ParseRecord => Boolean(v));
+
+    const items = records.map((r) => parseRecordToMusicItem(r, platform));
+
+    return res.json({ items });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'internal error' });
   }
 });
 
-app.get('/api/tune/song', async (req, res) => {
-  try {
-    const platform = String(req.query.platform ?? 'netease') as Platform;
-    const id = String(req.query.id ?? '');
-    const parsed = (await tuneRequest('/v1/parse', {
-      method: 'POST',
-      body: JSON.stringify({ platform, ids: id, quality: '320k' })
-    })) as { data?: ParseRecord[] };
-    res.json({ item: mapToMusicItem(platform, parsed.data?.[0] as ParseRecord) });
-  } catch {
-    res.status(502).json({ error: 'Upstream unavailable' });
-  }
-});
-
-app.get('/api/tune/lyrics', async (req, res) => {
-  try {
-    const platform = String(req.query.platform ?? 'netease') as Platform;
-    const id = String(req.query.id ?? '');
-    const parsed = (await tuneRequest('/v1/parse', {
-      method: 'POST',
-      body: JSON.stringify({ platform, ids: id, quality: '128k' })
-    })) as { data?: ParseRecord[] };
-    res.json({ lyrics: parsed.data?.[0]?.lyric ?? '' });
-  } catch {
-    res.status(502).json({ error: 'Upstream unavailable' });
-  }
-});
-
-const port = Number(process.env.PORT ?? 8787);
-app.listen(port, () => {
-  console.log(`proxy listening on :${port}`);
-});
+export default app;
