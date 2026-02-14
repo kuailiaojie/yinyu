@@ -17,7 +17,7 @@ const Loading = () => (
 
 export default function App() {
   return (
-    <Box sx={{ pb: 12 }}>
+    <Box sx={{ minHeight: '100dvh', pl: { xs: 0, md: 32 }, pb: { xs: 12, md: 2 } }}>
       <Suspense fallback={<Loading />}>
         <Routes>
           <Route path="/" element={<Home />} />

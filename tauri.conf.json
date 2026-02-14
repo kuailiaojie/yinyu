@@ -4,10 +4,22 @@
   "version": "0.1.0",
   "identifier": "com.example.yinyu",
   "build": {
+    "beforeBuildCommand": "npm run build",
     "frontendDist": "dist"
   },
+  "app": {
+    "windows": [
+      {
+        "title": "Yinyu",
+        "label": "main",
+        "width": 1200,
+        "height": 800,
+        "resizable": true
+      }
+    ]
+  },
   "bundle": {
-    "active": true,
-    "targets": "all"
+    "active": false,
+    "targets": ["deb", "rpm"]
   }
 }

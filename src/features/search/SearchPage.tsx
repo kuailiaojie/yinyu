@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Box, Chip, List, ListItemButton, TextField, Typography } from '@mui/material';
+import { useLocale } from '../../i18n/LocaleProvider';
 import { searchMusic } from './api/tuneProxy';
 import { dedupeMusicItems } from './utils/dedupe';
 import type { Platform } from './types';
@@ -9,6 +10,7 @@ const platforms: Platform[] = ['netease', 'qq', 'kuwo'];
 export default function SearchPage() {
   const [q, setQ] = useState('');
   const [items, setItems] = useState<ReturnType<typeof dedupeMusicItems>>([]);
+  const { t } = useLocale();
 
   const onSearch = async () => {
     if (!q.trim()) return;
@@ -18,13 +20,13 @@ export default function SearchPage() {
 
   return (
     <Box p={2}>
-      <Typography variant="h5">Aggregated Search</Typography>
+      <Typography variant="h5">{t('searchTitle')}</Typography>
       <TextField
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && onSearch()}
         fullWidth
-        label="Search music"
+        label={t('searchLabel')}
       />
       <List>
         {items.map((g) => (

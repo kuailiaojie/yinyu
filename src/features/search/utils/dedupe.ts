@@ -41,7 +41,7 @@ export function normalizeText(text: string): string {
 
   return simplified
     .toLowerCase()
-    .replace(/\s*[\(\[（【][^\)\]）】]*[\)\]）】]\s*$/g, '')
+    .replace(/\s*[([（【][^)\]）】]*[)\]）】]\s*$/g, '')
     .replace(/[^\p{L}\p{N}\u4e00-\u9fff]+/gu, '')
     .trim();
 }

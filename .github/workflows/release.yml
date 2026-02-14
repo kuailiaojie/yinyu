@@ -43,5 +43,5 @@ jobs:
         with:
           name: yinyu-${{ github.ref_name }}-${{ matrix.os }}
           path: |
-            src-tauri/target/release/bundle
+            target/release/bundle
             latest.json
