@@ -1,103 +1,32 @@
-name: Force Overwrite All PR Branches
+# This is the updated workflow file
+
+name: Auto Rebase All PRs
 
 on:
-  workflow_dispatch:  # 手动触发
-  schedule:
-    - cron: '0 0 * * *'  # 可选：每天一次（按需改或删除）
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
 
 jobs:
-  force_overwrite:
+  rebase:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
+      - name: Checkout PR
+        uses: actions/checkout@v2
         with:
           fetch-depth: 0
 
-      - name: Setup Git user
+      - name: Rebase
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'action@github.com'
+          git fetch origin main
+          git rebase origin/main
 
-      - name: Install gh and jq
-        run: sudo apt-get update && sudo apt-get install -y gh jq
-
-      - name: Get all open PRs from the same repo owner
-        id: list_prs
+      - name: Push changes
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
-          OWNER="${{ github.repository_owner }}"
-          gh pr list --state open --json number,headRefName,headRepositoryOwner |
-            jq -r --arg owner "$OWNER" '.[] | select(.headRepositoryOwner.login==$owner) | "\(.number) \(.headRefName)"' > pr_list.txt || true
-          echo "Saved PR list to pr_list.txt"
-          echo "::set-output name=pr_count::$(wc -l < pr_list.txt || true)"
-
-      - name: Show PRs (for debug)
-        run: |
-          echo "Owner: ${{ github.repository_owner }}"
-          echo "Repository: ${{ github.repository }}"
-          echo "--- PR list ---"
-          cat pr_list.txt || echo "(no PRs found)"
-
-      - name: Prepare authenticated remote for git push
-        run: |
-          # 确保 push 使用 token 认证（适用于本仓库分支）
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-          echo "Remote origin set to token-authenticated URL"
-
-      - name: Force overwrite each PR branch with main and push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          failed=""
-          TARGET="origin/main"   # 要用来覆盖 PR 分支的内容（可改为其它目标）
-          if [ ! -f pr_list.txt ] || [ "$(wc -c < pr_list.txt)" -eq 0 ]; then
-            echo "No PRs to process. Exiting."
-            exit 0
-          fi
-
-          while read -r pr_number pr_branch; do
-            if [ -z "$pr_branch" ]; then
-              continue
-            fi
-            echo "======================================"
-            echo "Processing PR #$pr_number  branch: $pr_branch"
-
-            # 确保该分支在 origin 上存在（跳过来自 fork 的分支）
-            if ! git ls-remote --exit-code --heads origin "$pr_branch" > /dev/null 2>&1; then
-              echo "Branch '$pr_branch' not present on origin (likely a fork). Skipping."
-              continue
-            fi
-
-            # 获取并切换到分支（建立本地分支跟踪 origin/<branch>）
-            git fetch origin "$pr_branch"
-            git checkout -B "$pr_branch" "origin/$pr_branch"
-
-            # 确保有最新 main
-            git fetch origin main
-
-            # 强制将分支重置为 main 的内容（完全覆盖）
-            echo "Resetting $pr_branch -> $TARGET (hard)"
-            git reset --hard "$TARGET"
-
-            # 强制 push 到远程分支
-            if git push -f origin "$pr_branch"; then
-              echo "Successfully force-pushed $pr_branch"
-            else
-              echo "ERROR: push failed for $pr_branch"
-              failed="$failed $pr_branch"
-            fi
-
-            # 小间隔（可选）
-            sleep 1
-          done < pr_list.txt
-
-          echo "======================================"
-          if [ -n "$failed" ]; then
-            echo "Finished with failures on branches:$failed"
-            exit 1
-          else
-            echo "All processed PR branches updated successfully."
-          fi
+          git push --force-with-lease origin HEAD:refs/heads/${{ github.head_ref }}
