@@ -1,7 +1,7 @@
 name: Auto Rebase All PRs
 
 on:
-  workflow_dispatch:  # 可以手动触发
+  workflow_dispatch:  # 手动触发
   schedule:          # 可选：每天定时触发一次
     - cron: '0 0 * * *'
 
@@ -19,11 +19,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Install jq
-        run: sudo apt-get install -y jq
+      - name: Install GitHub CLI
+        run: sudo apt-get update && sudo apt-get install -y gh jq
 
       - name: Get all open PRs
         id: prs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # ✅ 设置 GH_TOKEN
         run: |
           pr_list=$(gh pr list --state open --json number,headRefName --jq '.[] | "\(.number) \(.headRefName)"')
           echo "$pr_list" > pr_list.txt
@@ -31,9 +33,20 @@ jobs:
 
       - name: Rebase each PR
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           while read pr_number pr_branch; do
+            echo "Processing PR #$pr_number branch: $pr_branch"
+            git fetch origin $pr_branch
+            git checkout $pr_branch
+
+            # 自动 rebase，冲突默认使用 PR 分支内容
+            git fetch origin main
+            git rebase -X theirs origin/main || true
+
+            # push 回远程
+            git push -f origin $pr_branch
+          done < pr_list.txt
             echo "Processing PR #$pr_number branch: $pr_branch"
             git fetch origin $pr_branch
             git checkout $pr_branch
