@@ -1,3 +1,5 @@
+import type { GroupedMusicItem, MusicItem } from '../types';
+
 export type SearchTrack = {
   id?: string;
   title: string;
@@ -29,7 +31,6 @@ const TRADITIONAL_TO_SIMPLIFIED_MAP: Record<string, string> = {
 };
 
 function toSimplifiedChinese(input: string): string {
-  // 轻量降级方案：仅做可控映射，未命中的字符保持原样。
   return Array.from(input)
     .map((char) => TRADITIONAL_TO_SIMPLIFIED_MAP[char] ?? char)
     .join('');
@@ -65,4 +66,34 @@ export function dedupeTracks(tracks: SearchTrack[]): SearchTrack[] {
   }
 
   return result;
+}
+
+function toSearchTrack(item: MusicItem): SearchTrack {
+  return {
+    id: item.id,
+    title: `${item.title} ${item.artist}`,
+    durationSeconds: item.durationSec,
+  };
+}
+
+export function dedupeMusic(items: MusicItem[]): GroupedMusicItem[] {
+  const groups: GroupedMusicItem[] = [];
+
+  for (const item of items) {
+    const candidate = toSearchTrack(item);
+    const existing = groups.find((group) => isSameTrack(toSearchTrack(group.canonical), candidate));
+
+    if (existing) {
+      existing.variants.push(item);
+      continue;
+    }
+
+    groups.push({
+      key: `${normalizeText(item.title)}-${normalizeText(item.artist)}`,
+      canonical: item,
+      variants: [item],
+    });
+  }
+
+  return groups;
 }
