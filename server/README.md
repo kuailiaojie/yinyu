@@ -1,5 +1,12 @@
 # Server API Status Code Conventions
 
+## `/api/tune/search`
+
+- `200 OK`: 成功返回搜索结果，结构：`{ "items": MusicItem[] }`，最少包含 `id/platform/title/artist`。
+- `400 Bad Request`: 缺少 `keyword` 参数，返回：`{ "error": "keyword is required" }`。
+- `502 Bad Gateway`: 所有请求的平台上游均不可用。
+- `500 Internal Server Error`: 其他未预期的服务端错误。
+
 ## `/api/tune/song`
 
 - `200 OK`: 成功返回歌曲信息。
