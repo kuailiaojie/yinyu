@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { aggregateMusicItems } from '../server/index';
+import { aggregateMusicItems } from '../server/aggregate.js';
 
 test('multi-platform aggregation keeps each MusicItem.platform value', () => {
   const items = aggregateMusicItems({

@@ -1,5 +1,7 @@
 import express from 'express';
 
+import { aggregateMusicItems } from './aggregate.js';
+
 const app = express();
 app.use(express.json());
 
@@ -250,14 +252,31 @@ app.post('/api/tune/song', async (req, res) => {
       quality,
     });
 
-    const item = parsed.data?.[0];
+    const records = (parsed.data ?? []).map((item) => ({
+      id: String(item.id ?? ''),
+      title: item.name ?? '',
+      artist: item.artist ?? '',
+      url: item.url,
+    }));
+
+    const items = aggregateMusicItems(
+      platform === 'netease'
+        ? { netease: records }
+        : platform === 'qq'
+          ? { qq: records }
+          : platform === 'kuwo'
+            ? { kuwo: records }
+            : {},
+    );
+
+    const item = items[0];
     if (!item) {
       return res.status(404).json({ error: 'Song not found' });
     }
 
     return res.json({
       id: item.id,
-      title: item.name,
+      title: item.title,
       artist: item.artist,
       url: item.url,
     });
