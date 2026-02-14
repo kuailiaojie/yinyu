@@ -1,18 +1,18 @@
-name: Auto Rebase All PRs
+name: Force Rebase All PRs
 
 on:
   workflow_dispatch:  # 手动触发
-  schedule:          # 可选：每天定时触发一次
-    - cron: '0 0 * * *'
+  schedule:
+    - cron: '0 0 * * *'  # 可选定时
 
 jobs:
-  rebase_all_prs:
+  force_rebase_all_prs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # 获取完整历史
+          fetch-depth: 0
 
       - name: Setup Git
         run: |
@@ -22,39 +22,33 @@ jobs:
       - name: Install GitHub CLI
         run: sudo apt-get update && sudo apt-get install -y gh jq
 
-      - name: Get all open PRs
-        id: prs
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # ✅ 设置 GH_TOKEN
-        run: |
-          pr_list=$(gh pr list --state open --json number,headRefName --jq '.[] | "\(.number) \(.headRefName)"')
-          echo "$pr_list" > pr_list.txt
-          echo "::set-output name=pr_list::$pr_list"
-
-      - name: Rebase each PR
+      - name: Authenticate GH CLI
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          echo $GH_TOKEN | gh auth login --with-token
+
+      - name: Get all open PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr list --state open --json number,headRefName --jq '.[] | "\(.number) \(.headRefName)"' > pr_list.txt
+
+      - name: Force push PR branches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 用 token 覆盖远程 URL，保证 push 权限
+          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/kuailiaojie/yinyu.git
+
           while read pr_number pr_branch; do
             echo "Processing PR #$pr_number branch: $pr_branch"
             git fetch origin $pr_branch
             git checkout $pr_branch
 
-            # 自动 rebase，冲突默认使用 PR 分支内容
-            git fetch origin main
-            git rebase -X theirs origin/main || true
+            # 使用 main 的内容强制覆盖 PR 分支
+            git reset --hard origin/main
 
-            # push 回远程
-            git push -f origin $pr_branch
-          done < pr_list.txt
-            echo "Processing PR #$pr_number branch: $pr_branch"
-            git fetch origin $pr_branch
-            git checkout $pr_branch
-
-            # 自动 rebase，遇冲突使用 PR 的内容
-            git fetch origin main
-            git rebase -X theirs origin/main || true
-
-            # push 回远程
+            # 强制 push
             git push -f origin $pr_branch
           done < pr_list.txt
