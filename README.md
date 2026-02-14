@@ -1,64 +1,21 @@
-# Yinyu Music App
+# 搜索去重实现说明
 
-Web + Tauri desktop music player with Material You dynamic theming, lyrics experience, wave progress, aggregated search, and release automation.
+## `normalizeText` 处理流程
 
-## Quickstart
+`src/features/search/utils/dedupe.ts` 中的 `normalizeText` 目前按以下步骤处理标题：
 
-```bash
-npm ci
-npm run dev
-```
+1. Unicode `NFKC` 归一化。
+2. 繁体到简体的轻量映射转换（基于内置映射表）。
+3. 英文统一小写。
+4. 去掉尾部括号后缀（如 `(Live)` / `（现场版）`）。
+5. 去除非字母/数字/汉字字符。
 
-Run local proxy:
+## 繁简转换方案与取舍
 
-```bash
-cp .env.example .env
-npm run server:dev
-```
-
-Tauri desktop dev/build:
-
-```bash
-npm run tauri:dev
-npm run tauri:build
-```
-
-## Environment
-
-- `TUNE_API_BASE` (default `https://tunehub.sayqz.com/api`)
-- `TUNE_API_KEY`
-- `RATE_LIMIT_PER_MINUTE`
-- `CACHE_TTL_MS`
-- `TAURI_BUILD=true` (required in GitHub secrets)
-
-## API spec usage (`/api.md`)
-
-The server strictly uses upstream endpoints from `api.md`:
-
-- `POST /v1/parse`
-- `GET /v1/methods/:platform/:function`
-
-The parse response shape is not strictly defined in `api.md`, so translations are centralized in `server/mappings.ts` and documented in `server/README.md`.
-
-## Tests and CI
-
-```bash
-npm run lint
-npm run test
-npm run ci-build
-```
-
-GitHub workflow `.github/workflows/release.yml` runs lint/tests/build and uses `tauri-apps/tauri-action` in a matrix build for Linux/macOS/Windows. It drafts a release and includes updater artifacts (`latest.json`) for auto-updates.
-
-## Signing / secrets
-
-Optional signing secrets:
-
-- `TAURI_SIGNING_PRIVATE_KEY`
-- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
-- `CODE_SIGN_CERT`
-- `CODESIGN_PASSWORD`
-
-## Legal note
-
-You are responsible for music licensing, streaming rights, and lyrics copyright compliance in your deployment region.
+- 采用**内置映射表**而非外部依赖，原因是：
+  - 体积更小、可控性更高；
+  - 无需引入额外构建与运行时成本；
+  - 对高频歌曲标题字符已足够覆盖。
+- 降级行为：
+  - 若字符不在映射表中，保持原样，不会破坏现有匹配逻辑；
+  - 即使映射能力不足，英文大小写、括号后缀、时长近似逻辑仍可正常工作。

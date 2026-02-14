@@ -1,60 +1,68 @@
-import Fuse from 'fuse.js';
-import type { GroupedMusicItem, MusicItem } from '../types';
+export type SearchTrack = {
+  id?: string;
+  title: string;
+  durationSeconds?: number;
+};
 
-export function normalizeText(v: string): string {
-  return v
-    .normalize('NFKC')
+const TRADITIONAL_TO_SIMPLIFIED_MAP: Record<string, string> = {
+  後: '后',
+  來: '来',
+  臺: '台',
+  風: '风',
+  愛: '爱',
+  樂: '乐',
+  國: '国',
+  說: '说',
+  開: '开',
+  門: '门',
+  車: '车',
+  這: '这',
+  個: '个',
+  麼: '么',
+  為: '为',
+  與: '与',
+  時: '时',
+  間: '间',
+  夢: '梦',
+  聽: '听',
+  見: '见',
+};
+
+function toSimplifiedChinese(input: string): string {
+  // 轻量降级方案：仅做可控映射，未命中的字符保持原样。
+  return Array.from(input)
+    .map((char) => TRADITIONAL_TO_SIMPLIFIED_MAP[char] ?? char)
+    .join('');
+}
+
+export function normalizeText(text: string): string {
+  const simplified = toSimplifiedChinese(text.normalize('NFKC'));
+
+  return simplified
     .toLowerCase()
-    .replace(/\([^)]*\)/g, '')
-    .replace(/[\p{P}\p{S}]/gu, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/\s*[\(\[（【][^\)\]）】]*[\)\]）】]\s*$/g, '')
+    .replace(/[^\p{L}\p{N}\u4e00-\u9fff]+/gu, '')
     .trim();
 }
 
-export function normalizedKey(item: MusicItem): string {
-  return `${normalizeText(item.title)}::${normalizeText(item.artist)}`;
+function isDurationClose(a?: number, b?: number, toleranceSeconds = 2): boolean {
+  if (a == null || b == null) return true;
+  return Math.abs(a - b) <= toleranceSeconds;
 }
 
-function levenshtein(a: string, b: string): number {
-  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i]);
-  for (let j = 1; j <= b.length; j++) dp[0][j] = j;
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) {
-      dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,
-        dp[i][j - 1] + 1,
-        dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
-      );
-    }
-  }
-  return dp[a.length][b.length];
+export function isSameTrack(a: SearchTrack, b: SearchTrack): boolean {
+  return normalizeText(a.title) === normalizeText(b.title) && isDurationClose(a.durationSeconds, b.durationSeconds);
 }
 
-export function dedupeMusic(items: MusicItem[]): GroupedMusicItem[] {
-  const groups = new Map<string, MusicItem[]>();
-  for (const item of items) {
-    const key = normalizedKey(item);
-    groups.set(key, [...(groups.get(key) ?? []), item]);
-  }
+export function dedupeTracks(tracks: SearchTrack[]): SearchTrack[] {
+  const result: SearchTrack[] = [];
 
-  const keys = [...groups.keys()];
-  const fuse = new Fuse(keys, { threshold: 0.2 });
-  for (const key of keys) {
-    for (const alt of fuse.search(key).map((r) => r.item)) {
-      if (key === alt || !groups.has(key) || !groups.has(alt)) continue;
-      const [a, b] = [groups.get(key) ?? [], groups.get(alt) ?? []];
-      const dist = levenshtein(key, alt);
-      const durationNear = a.some((x) => b.some((y) => Math.abs((x.durationSec ?? 0) - (y.durationSec ?? 999)) < 3));
-      if (dist <= 3 && durationNear) {
-        groups.set(key, [...a, ...b]);
-        groups.delete(alt);
-      }
+  for (const track of tracks) {
+    const duplicated = result.some((existing) => isSameTrack(existing, track));
+    if (!duplicated) {
+      result.push(track);
     }
   }
 
-  return [...groups.entries()].map(([key, variants]) => ({
-    key,
-    variants,
-    canonical: variants.sort((a, b) => Number(Boolean(b.lyricsAvailable && b.audioUrl)) - Number(Boolean(a.lyricsAvailable && a.audioUrl)))[0]
-  }));
+  return result;
 }
