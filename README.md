@@ -1,21 +1,33 @@
-# 搜索去重实现说明
+# yinyu
 
-## `normalizeText` 处理流程
+## 本地构建
 
-`src/features/search/utils/dedupe.ts` 中的 `normalizeText` 目前按以下步骤处理标题：
+本仓库采用**根目录 `tauri.conf.json`** 的结构，不使用 `src-tauri/`。
 
-1. Unicode `NFKC` 归一化。
-2. 繁体到简体的轻量映射转换（基于内置映射表）。
-3. 英文统一小写。
-4. 去掉尾部括号后缀（如 `(Live)` / `（现场版）`）。
-5. 去除非字母/数字/汉字字符。
+1. 构建前端：
 
-## 繁简转换方案与取舍
+```bash
+npm run build
+```
 
-- 采用**内置映射表**而非外部依赖，原因是：
-  - 体积更小、可控性更高；
-  - 无需引入额外构建与运行时成本；
-  - 对高频歌曲标题字符已足够覆盖。
-- 降级行为：
-  - 若字符不在映射表中，保持原样，不会破坏现有匹配逻辑；
-  - 即使映射能力不足，英文大小写、括号后缀、时长近似逻辑仍可正常工作。
+2. 构建桌面包：
+
+```bash
+npm run tauri build
+```
+
+构建完成后，Tauri 产物位于：
+
+```text
+target/release/bundle
+```
+
+## CI 产物位置
+
+GitHub Actions workflow 会上传与本地一致的目录：
+
+```text
+target/release/bundle
+```
+
+请勿按 `src-tauri/target/...` 路径排查当前仓库的问题，当前结构下该路径不适用。
