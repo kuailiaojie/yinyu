@@ -1,0 +1,10 @@
+{
+  "root": true,
+  "env": { "browser": true, "es2022": true, "node": true },
+  "extends": ["eslint:recommended", "plugin:react-hooks/recommended", "prettier"],
+  "parserOptions": { "ecmaVersion": "latest", "sourceType": "module" },
+  "ignorePatterns": ["dist", "src-tauri"],
+  "rules": {
+    "no-console": ["warn", { "allow": ["warn", "error"] }]
+  }
+}
