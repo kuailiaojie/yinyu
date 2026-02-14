@@ -68,31 +68,29 @@ export function dedupeTracks(tracks: SearchTrack[]): SearchTrack[] {
   return result;
 }
 
-function toSearchTrack(item: MusicItem): SearchTrack {
-  return {
-    id: item.id,
-    title: `${item.title} ${item.artist}`,
-    durationSeconds: item.durationSec,
-  };
-}
-
-export function dedupeMusic(items: MusicItem[]): GroupedMusicItem[] {
+export function dedupeMusicItems(items: MusicItem[]): GroupedMusicItem[] {
   const groups: GroupedMusicItem[] = [];
 
   for (const item of items) {
-    const candidate = toSearchTrack(item);
-    const existing = groups.find((group) => isSameTrack(toSearchTrack(group.canonical), candidate));
+    const matchedGroup = groups.find((group) => {
+      const canonical = group.canonical;
+      return (
+        normalizeText(canonical.title) === normalizeText(item.title) &&
+        normalizeText(canonical.artist) === normalizeText(item.artist) &&
+        isDurationClose(canonical.durationSec, item.durationSec)
+      );
+    });
 
-    if (existing) {
-      existing.variants.push(item);
+    if (!matchedGroup) {
+      groups.push({
+        key: `${normalizeText(item.title)}-${normalizeText(item.artist)}`,
+        canonical: item,
+        variants: [item],
+      });
       continue;
     }
 
-    groups.push({
-      key: `${normalizeText(item.title)}-${normalizeText(item.artist)}`,
-      canonical: item,
-      variants: [item],
-    });
+    matchedGroup.variants.push(item);
   }
 
   return groups;
