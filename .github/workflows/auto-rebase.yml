@@ -10,8 +10,16 @@ jobs:
     steps:
       - name: Checkout PR
         uses: actions/checkout@v2
-      - name: Rebase PR
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Setup Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Rebase PR onto main
         run: |
           git fetch origin main
           git rebase origin/main
-          git push -f
+          git push -f origin HEAD:${{ github.head_ref }}
