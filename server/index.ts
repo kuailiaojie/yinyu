@@ -1,24 +1,18 @@
 import express from 'express';
 
-import { aggregateMusicItems } from './aggregate.js';
+import { mapToMusicItem, type Platform } from './mappings.js';
 
 const app = express();
 app.use(express.json());
 
-const UPSTREAM_URL = process.env.TUNEHUB_UPSTREAM_URL ?? 'https://tunehub.sayqz.com/api/v1/parse';
-const UPSTREAM_API_KEY = process.env.TUNEHUB_API_KEY;
+const TUNE_API_BASE = process.env.TUNE_API_BASE ?? 'https://tunehub.sayqz.com/api';
+const TUNE_API_KEY = process.env.TUNE_API_KEY;
+const PORT = Number(process.env.PORT ?? 3000);
+const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX ?? 80);
+const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS ?? 60_000);
+const CACHE_TTL_MS = Number(process.env.CACHE_TTL_MS ?? 60_000);
 
-type ParseItem = {
-  id?: string | number;
-  name?: string;
-  artist?: string;
-  url?: string;
-  lyric?: string;
-};
-
-type ParseResponse = {
-  data?: ParseItem[];
-};
+const ALLOWED_PLATFORMS: Platform[] = ['netease', 'qq', 'kuwo'];
 
 type MethodConfig = {
   method?: 'GET' | 'POST';
@@ -29,102 +23,76 @@ type MethodConfig = {
   transform?: string;
 };
 
-function withAuthHeaders(headers?: Record<string, string>): Record<string, string> {
-  if (!API_KEY) return headers ?? {};
+type CacheEntry = { expiresAt: number; value: unknown };
+const cache = new Map<string, CacheEntry>();
+const rateBucket = new Map<string, { count: number; resetAt: number }>();
+
+function getClientIp(req: express.Request): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.length > 0) {
+    return forwarded.split(',')[0]?.trim() ?? 'unknown';
+  }
+  return req.ip ?? req.socket.remoteAddress ?? 'unknown';
+}
+
+function readCached(key: string): unknown | null {
+  const item = cache.get(key);
+  if (!item) return null;
+  if (Date.now() > item.expiresAt) {
+    cache.delete(key);
+    return null;
+  }
+  return item.value;
+}
+
+function writeCached(key: string, value: unknown): void {
+  cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+}
+
+function withKey(headers?: Record<string, string>): Record<string, string> {
   return {
     ...(headers ?? {}),
-    'X-API-Key': API_KEY,
+    ...(TUNE_API_KEY ? { 'X-API-Key': TUNE_API_KEY } : {}),
   };
 }
 
-async function callUpstream(payload: Record<string, unknown>): Promise<ParseResponse> {
-  if (!UPSTREAM_API_KEY) {
-    throw new Error('UPSTREAM_API_KEY_MISSING');
-  }
-
-  let upstreamResponse: Response;
-
-  try {
-    upstreamResponse = await fetch(UPSTREAM_URL, {
-      method: 'POST',
-      headers: withAuthHeaders({
-        'Content-Type': 'application/json',
-        'X-API-Key': UPSTREAM_API_KEY,
-      },
-      body: JSON.stringify(payload),
-    });
-  } catch {
-    throw new Error('UPSTREAM_UNAVAILABLE');
-  }
-
-  if (upstreamResponse.status === 401 || upstreamResponse.status === 403) {
-    throw new Error('UPSTREAM_AUTH_FAILED');
-  }
-
-  if (upstreamResponse.status >= 500) {
-    throw new Error('UPSTREAM_UNAVAILABLE');
-  }
-
-  if (!upstreamResponse.ok) {
-    throw new Error('UPSTREAM_UNAVAILABLE');
-  }
-
-  return (await upstreamResponse.json()) as ParseResponse;
-}
-
-async function fetchMethodConfig(platform: Platform): Promise<MethodConfig> {
-  let upstreamResponse: Response;
-  try {
-    upstreamResponse = await fetch(`${METHODS_URL}/${platform}/search`, {
-      method: 'GET',
-      headers: withAuthHeaders(),
-    });
-  } catch {
-    throw new Error('UPSTREAM_UNAVAILABLE');
-  }
-
-  if (!upstreamResponse.ok) {
-    throw new Error('UPSTREAM_UNAVAILABLE');
-  }
-
-  const payload = (await upstreamResponse.json()) as { data?: MethodConfig };
-  return payload.data ?? {};
-}
-
-function fillTemplates(value: unknown, vars: Record<string, string>): unknown {
+function applyTemplate(value: unknown, vars: Record<string, string>): unknown {
   if (typeof value === 'string') {
     return value.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key: string) => vars[key] ?? '');
   }
 
-  if (Array.isArray(value)) {
-    return value.map((entry) => fillTemplates(entry, vars));
-  }
+  if (Array.isArray(value)) return value.map((entry) => applyTemplate(entry, vars));
 
   if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, fillTemplates(v, vars)]));
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, applyTemplate(v, vars)]));
   }
 
   return value;
 }
 
-function toArray(payload: unknown): unknown[] {
-  if (Array.isArray(payload)) return payload;
-  if (!payload || typeof payload !== 'object') return [];
+function toObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
 
-  const rec = payload as Record<string, unknown>;
-  if (Array.isArray(rec.data)) return rec.data;
-  if (Array.isArray(rec.list)) return rec.list;
-  if (Array.isArray(rec.songs)) return rec.songs;
-  if (rec.data && typeof rec.data === 'object') {
-    const dataRec = rec.data as Record<string, unknown>;
-    if (Array.isArray(dataRec.list)) return dataRec.list;
-    if (Array.isArray(dataRec.songs)) return dataRec.songs;
+function parseArray(payload: unknown): Record<string, unknown>[] {
+  if (Array.isArray(payload)) return payload.map((x) => toObject(x));
+  const rec = toObject(payload);
+  const nested = rec.data;
+  if (Array.isArray(nested)) return nested.map((x) => toObject(x));
+  if (nested && typeof nested === 'object') {
+    const dataObj = nested as Record<string, unknown>;
+    for (const key of ['list', 'songs']) {
+      if (Array.isArray(dataObj[key])) return (dataObj[key] as unknown[]).map((x) => toObject(x));
+    }
   }
-
+  for (const key of ['list', 'songs']) {
+    if (Array.isArray(rec[key])) return (rec[key] as unknown[]).map((x) => toObject(x));
+  }
   return [];
 }
 
-function readString(rec: Record<string, unknown>, keys: string[]): string {
+function pickFirstString(rec: Record<string, unknown>, keys: string[]): string {
   for (const key of keys) {
     const value = rec[key];
     if (typeof value === 'string' && value.trim()) return value.trim();
@@ -133,216 +101,181 @@ function readString(rec: Record<string, unknown>, keys: string[]): string {
   return '';
 }
 
-function pickArtist(raw: unknown): string {
-  if (typeof raw === 'string') return raw;
-  if (Array.isArray(raw)) {
-    return raw
-      .map((x) => (typeof x === 'string' ? x : typeof x === 'object' && x ? readString(x as Record<string, unknown>, ['name', 'artist']) : ''))
+function pickArtist(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => {
+        if (typeof entry === 'string') return entry;
+        if (entry && typeof entry === 'object') {
+          return pickFirstString(entry as Record<string, unknown>, ['name', 'artist']);
+        }
+        return '';
+      })
       .filter(Boolean)
       .join('/');
   }
-  if (raw && typeof raw === 'object') {
-    return readString(raw as Record<string, unknown>, ['name', 'artist']);
+  if (value && typeof value === 'object') {
+    return pickFirstString(value as Record<string, unknown>, ['name', 'artist']);
   }
   return '';
 }
 
-function normalizeSearchItems(platform: Platform, payload: unknown): Array<{ id: string; platform: Platform; title: string; artist: string }> {
-  return toArray(payload)
-    .map((item) => {
-      if (!item || typeof item !== 'object') return null;
-      const rec = item as Record<string, unknown>;
-      const id = readString(rec, ['id', 'songid', 'songId', 'rid', 'mid']);
-      const title = readString(rec, ['title', 'name', 'songname', 'songName']);
-      const artist = readString(rec, ['artist', 'singer', 'artistName']) || pickArtist(rec.ar);
-      if (!id || !title || !artist) return null;
-      return { id, platform, title, artist };
-    })
-    .filter((item): item is { id: string; platform: Platform; title: string; artist: string } => Boolean(item));
+async function fetchMethodConfig(platform: Platform): Promise<MethodConfig> {
+  const cacheKey = `method:${platform}:search`;
+  const cached = readCached(cacheKey);
+  if (cached) return cached as MethodConfig;
+
+  const response = await fetch(`${TUNE_API_BASE}/v1/methods/${platform}/search`, { headers: withKey() });
+  if (!response.ok) throw new Error('UPSTREAM_UNAVAILABLE');
+  const json = (await response.json()) as { data?: MethodConfig };
+  const value = json.data ?? {};
+  writeCached(cacheKey, value);
+  return value;
 }
 
-async function searchByPlatform(platform: Platform, keyword: string): Promise<Array<{ id: string; platform: Platform; title: string; artist: string }>> {
+async function searchOne(platform: Platform, keyword: string): Promise<ReturnType<typeof mapToMusicItem>[]> {
   const config = await fetchMethodConfig(platform);
   if (!config.url) return [];
 
   const vars = { keyword, page: '1', pageSize: '30' };
-  const method = config.method ?? 'GET';
-  const headers = withAuthHeaders(config.headers);
-
-  const preparedParams = (fillTemplates(config.params ?? {}, vars) ?? {}) as Record<string, string>;
-  const preparedBody = fillTemplates(config.body ?? {}, vars);
-
+  const params = toObject(applyTemplate(config.params ?? {}, vars));
+  const body = applyTemplate(config.body ?? {}, vars);
   const url = new URL(config.url);
-  Object.entries(preparedParams).forEach(([key, value]) => {
-    url.searchParams.set(key, String(value));
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)));
+
+  const response = await fetch(url.toString(), {
+    method: config.method ?? 'GET',
+    headers: withKey(config.headers),
+    body: (config.method ?? 'GET') === 'POST' ? JSON.stringify(body) : undefined,
   });
 
-  let response: Response;
-  try {
-    response = await fetch(url.toString(), {
-      method,
-      headers,
-      body: method === 'POST' ? JSON.stringify(preparedBody) : undefined,
-    });
-  } catch {
-    throw new Error('UPSTREAM_UNAVAILABLE');
-  }
+  if (!response.ok) throw new Error('UPSTREAM_UNAVAILABLE');
 
-  if (!response.ok) {
-    throw new Error('UPSTREAM_UNAVAILABLE');
-  }
-
-  const text = await response.text();
-  let raw: unknown = text;
+  let raw: unknown = await response.text();
   try {
-    raw = JSON.parse(text);
+    raw = JSON.parse(String(raw));
   } catch {
-    raw = text;
+    // keep plain text raw
   }
 
   if (config.transform) {
     try {
-      const transform = new Function(`return (${config.transform});`)() as (input: unknown) => unknown;
-      raw = transform(raw);
+      const fn = new Function(`return (${config.transform});`)() as (input: unknown) => unknown;
+      raw = fn(raw);
     } catch {
-      // ignore transform evaluation error and fallback to raw payload
+      // ignore invalid transform
     }
   }
 
-  return normalizeSearchItems(platform, raw);
+  return parseArray(raw)
+    .map((entry) => {
+      const id = pickFirstString(entry, ['id', 'songid', 'songId', 'rid', 'mid']);
+      const title = pickFirstString(entry, ['title', 'name', 'songname', 'songName']);
+      const artist = pickFirstString(entry, ['artist', 'singer', 'artistName']) || pickArtist(entry.ar);
+      if (!id || !title || !artist) return null;
+      return mapToMusicItem(platform, { id, title, artist });
+    })
+    .filter((item): item is ReturnType<typeof mapToMusicItem> => Boolean(item));
 }
+
+app.use((req, res, next) => {
+  const ip = getClientIp(req);
+  const now = Date.now();
+  const record = rateBucket.get(ip);
+
+  if (!record || now > record.resetAt) {
+    rateBucket.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return next();
+  }
+
+  if (record.count >= RATE_LIMIT_MAX) {
+    return res.status(429).json({ error: 'Too many requests' });
+  }
+
+  record.count += 1;
+  return next();
+});
 
 app.get('/api/tune/search', async (req, res) => {
   const keyword = typeof req.query.keyword === 'string' ? req.query.keyword.trim() : '';
-  const platformParam = typeof req.query.platforms === 'string' ? req.query.platforms : '';
+  const platformList = typeof req.query.platforms === 'string' ? req.query.platforms : '';
+  if (!keyword) return res.status(400).json({ error: 'keyword is required' });
 
-  if (!keyword) {
-    return res.status(400).json({ error: 'keyword is required' });
-  }
-
-  const requestedPlatforms = platformParam
+  const requested = platformList
     .split(',')
-    .map((value) => value.trim())
-    .filter((value): value is Platform => ALLOWED_PLATFORMS.includes(value as Platform));
-
-  const platforms = requestedPlatforms.length ? requestedPlatforms : ALLOWED_PLATFORMS;
+    .map((x) => x.trim())
+    .filter((x): x is Platform => ALLOWED_PLATFORMS.includes(x as Platform));
+  const platforms = requested.length ? requested : ALLOWED_PLATFORMS;
 
   try {
-    const settled = await Promise.allSettled(platforms.map((platform) => searchByPlatform(platform, keyword)));
-    const items = settled.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
-
-    if (items.length > 0) {
-      return res.json({ items });
-    }
-
-    const hasRejected = settled.some((result) => result.status === 'rejected');
-    if (hasRejected) {
+    const result = await Promise.allSettled(platforms.map((platform) => searchOne(platform, keyword)));
+    const items = result.flatMap((entry) => (entry.status === 'fulfilled' ? entry.value : []));
+    if (items.length > 0) return res.json({ items });
+    if (result.some((entry) => entry.status === 'rejected')) {
       return res.status(502).json({ error: 'Upstream unavailable' });
     }
-
     return res.json({ items: [] });
-  } catch (error) {
-    if (error instanceof Error && error.message === 'UPSTREAM_UNAVAILABLE') {
-      return res.status(502).json({ error: 'Upstream unavailable' });
-    }
-
+  } catch {
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 app.post('/api/tune/song', async (req, res) => {
   const { platform, id, quality = '320k' } = req.body ?? {};
+  if (!platform || !id) return res.status(400).json({ error: 'platform and id are required' });
 
   try {
-    const parsed = await callUpstream({
-      platform,
-      ids: id,
-      quality,
+    const response = await fetch(`${TUNE_API_BASE}/v1/parse`, {
+      method: 'POST',
+      headers: withKey({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ platform, ids: id, quality }),
     });
 
-    const records = (parsed.data ?? []).map((item) => ({
-      id: String(item.id ?? ''),
-      title: item.name ?? '',
-      artist: item.artist ?? '',
-      url: item.url,
-    }));
+    if (!response.ok) return res.status(502).json({ error: 'Upstream unavailable' });
 
-    const items = aggregateMusicItems(
-      platform === 'netease'
-        ? { netease: records }
-        : platform === 'qq'
-          ? { qq: records }
-          : platform === 'kuwo'
-            ? { kuwo: records }
-            : {},
-    );
-
-    const item = items[0];
-    if (!item) {
-      return res.status(404).json({ error: 'Song not found' });
-    }
+    const payload = (await response.json()) as { data?: Array<Record<string, unknown>> };
+    const item = payload.data?.[0];
+    if (!item) return res.status(404).json({ error: 'Song not found' });
 
     return res.json({
-      id: item.id,
-      title: item.title,
-      artist: item.artist,
-      url: item.url,
+      id: String(item.id ?? ''),
+      title: String(item.name ?? ''),
+      artist: String(item.artist ?? ''),
+      url: typeof item.url === 'string' ? item.url : undefined,
     });
-  } catch (error) {
-    if (error instanceof Error && error.message === 'UPSTREAM_API_KEY_MISSING') {
-      return res.status(500).json({ error: 'Server misconfigured: missing TUNEHUB_API_KEY' });
-    }
-
-    if (error instanceof Error && error.message === 'UPSTREAM_AUTH_FAILED') {
-      return res.status(500).json({ error: 'Upstream authentication failed' });
-    }
-
-    if (error instanceof Error && error.message === 'UPSTREAM_UNAVAILABLE') {
-      return res.status(502).json({ error: 'Upstream unavailable' });
-    }
-
+  } catch {
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 app.post('/api/tune/lyrics', async (req, res) => {
   const { platform, id } = req.body ?? {};
+  if (!platform || !id) return res.status(400).json({ error: 'platform and id are required' });
 
   try {
-    const parsed = await callUpstream({
-      platform,
-      ids: id,
-      quality: '128k',
+    const response = await fetch(`${TUNE_API_BASE}/v1/parse`, {
+      method: 'POST',
+      headers: withKey({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ platform, ids: id, quality: '128k' }),
     });
 
-    const item = parsed.data?.[0];
-    if (!item) {
-      return res.status(404).json({ error: 'Lyrics not found' });
-    }
+    if (!response.ok) return res.status(502).json({ error: 'Upstream unavailable' });
+
+    const payload = (await response.json()) as { data?: Array<Record<string, unknown>> };
+    const item = payload.data?.[0];
+    if (!item) return res.status(404).json({ error: 'Lyrics not found' });
 
     return res.json({
-      id: item.id,
-      lyrics: item.lyric ?? '',
+      id: String(item.id ?? ''),
+      lyrics: typeof item.lyric === 'string' ? item.lyric : '',
     });
-  } catch (error) {
-    if (error instanceof Error && error.message === 'UPSTREAM_API_KEY_MISSING') {
-      return res.status(500).json({ error: 'Server misconfigured: missing TUNEHUB_API_KEY' });
-    }
-
-    if (error instanceof Error && error.message === 'UPSTREAM_AUTH_FAILED') {
-      return res.status(500).json({ error: 'Upstream authentication failed' });
-    }
-
-    if (error instanceof Error && error.message === 'UPSTREAM_UNAVAILABLE') {
-      return res.status(502).json({ error: 'Upstream unavailable' });
-    }
-
+  } catch {
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-const port = Number(process.env.PORT ?? 3000);
-app.listen(port, () => {
+app.listen(PORT, () => {
   // eslint-disable-next-line no-console
-  console.log(`Server listening on :${port}`);
+  console.log(`Server listening on :${PORT}`);
 });
