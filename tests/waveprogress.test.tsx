@@ -9,8 +9,9 @@ describe('WaveProgress', () => {
     render(<WaveProgress progress={0.5} onSeek={onSeek} />);
     const slider = screen.getByRole('slider', { name: /playback progress/i });
     expect(slider).toBeInTheDocument();
-    await userEvent.click(slider);
-    await userEvent.keyboard('{ArrowRight}');
+    const user = userEvent.setup();
+    await user.click(slider);
+    await user.keyboard('{ArrowRight}');
     expect(onSeek).toHaveBeenCalled();
   });
 });
