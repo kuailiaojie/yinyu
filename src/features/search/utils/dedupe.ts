@@ -1,3 +1,5 @@
+import type { GroupedMusicItem, MusicItem } from '../types';
+
 export type SearchTrack = {
   id?: string;
   title: string;
@@ -65,4 +67,32 @@ export function dedupeTracks(tracks: SearchTrack[]): SearchTrack[] {
   }
 
   return result;
+}
+
+export function dedupeMusicItems(items: MusicItem[]): GroupedMusicItem[] {
+  const groups: GroupedMusicItem[] = [];
+
+  for (const item of items) {
+    const matchedGroup = groups.find((group) => {
+      const canonical = group.canonical;
+      return (
+        normalizeText(canonical.title) === normalizeText(item.title) &&
+        normalizeText(canonical.artist) === normalizeText(item.artist) &&
+        isDurationClose(canonical.durationSec, item.durationSec)
+      );
+    });
+
+    if (!matchedGroup) {
+      groups.push({
+        key: `${normalizeText(item.title)}-${normalizeText(item.artist)}`,
+        canonical: item,
+        variants: [item],
+      });
+      continue;
+    }
+
+    matchedGroup.variants.push(item);
+  }
+
+  return groups;
 }

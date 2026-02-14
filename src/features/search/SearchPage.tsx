@@ -1,19 +1,19 @@
 import { useState } from 'react';
 import { Box, Chip, List, ListItemButton, TextField, Typography } from '@mui/material';
 import { searchMusic } from './api/tuneProxy';
-import { dedupeMusic } from './utils/dedupe';
+import { dedupeMusicItems } from './utils/dedupe';
 import type { Platform } from './types';
 
 const platforms: Platform[] = ['netease', 'qq', 'kuwo'];
 
 export default function SearchPage() {
   const [q, setQ] = useState('');
-  const [items, setItems] = useState<ReturnType<typeof dedupeMusic>>([]);
+  const [items, setItems] = useState<ReturnType<typeof dedupeMusicItems>>([]);
 
   const onSearch = async () => {
     if (!q.trim()) return;
     const found = await searchMusic(q, platforms);
-    setItems(dedupeMusic(found));
+    setItems(dedupeMusicItems(found));
   };
 
   return (
