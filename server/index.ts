@@ -4,6 +4,7 @@ const app = express();
 app.use(express.json());
 
 const UPSTREAM_URL = process.env.TUNEHUB_UPSTREAM_URL ?? 'https://tunehub.sayqz.com/api/v1/parse';
+const UPSTREAM_API_KEY = process.env.TUNEHUB_API_KEY;
 
 type ParseItem = {
   id?: string | number;
@@ -18,6 +19,10 @@ type ParseResponse = {
 };
 
 async function callUpstream(payload: Record<string, unknown>): Promise<ParseResponse> {
+  if (!UPSTREAM_API_KEY) {
+    throw new Error('UPSTREAM_API_KEY_MISSING');
+  }
+
   let upstreamResponse: Response;
 
   try {
@@ -25,10 +30,19 @@ async function callUpstream(payload: Record<string, unknown>): Promise<ParseResp
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-API-Key': UPSTREAM_API_KEY,
       },
       body: JSON.stringify(payload),
     });
   } catch {
+    throw new Error('UPSTREAM_UNAVAILABLE');
+  }
+
+  if (upstreamResponse.status === 401 || upstreamResponse.status === 403) {
+    throw new Error('UPSTREAM_AUTH_FAILED');
+  }
+
+  if (upstreamResponse.status >= 500) {
     throw new Error('UPSTREAM_UNAVAILABLE');
   }
 
@@ -61,6 +75,14 @@ app.post('/api/tune/song', async (req, res) => {
       url: item.url,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === 'UPSTREAM_API_KEY_MISSING') {
+      return res.status(500).json({ error: 'Server misconfigured: missing TUNEHUB_API_KEY' });
+    }
+
+    if (error instanceof Error && error.message === 'UPSTREAM_AUTH_FAILED') {
+      return res.status(500).json({ error: 'Upstream authentication failed' });
+    }
+
     if (error instanceof Error && error.message === 'UPSTREAM_UNAVAILABLE') {
       return res.status(502).json({ error: 'Upstream unavailable' });
     }
@@ -89,6 +111,14 @@ app.post('/api/tune/lyrics', async (req, res) => {
       lyrics: item.lyric ?? '',
     });
   } catch (error) {
+    if (error instanceof Error && error.message === 'UPSTREAM_API_KEY_MISSING') {
+      return res.status(500).json({ error: 'Server misconfigured: missing TUNEHUB_API_KEY' });
+    }
+
+    if (error instanceof Error && error.message === 'UPSTREAM_AUTH_FAILED') {
+      return res.status(500).json({ error: 'Upstream authentication failed' });
+    }
+
     if (error instanceof Error && error.message === 'UPSTREAM_UNAVAILABLE') {
       return res.status(502).json({ error: 'Upstream unavailable' });
     }
