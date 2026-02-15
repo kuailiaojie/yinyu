@@ -15,7 +15,7 @@ const mock = [
 
 export default function PlayerPage() {
   const { id } = useParams<{ id: string }>();
-  const { queue, trackId, setTrack, play } = usePlayerStore();
+  const { setTrack, play } = usePlayerStore();
 
   useEffect(() => {
     if (id) {
@@ -24,7 +24,6 @@ export default function PlayerPage() {
     }
   }, [id, setTrack, play]);
 
-  const activeTrack = queue.find((track) => track.id === (trackId ?? id));
 
   return (
     <AppShell>
