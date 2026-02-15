@@ -1,15 +1,77 @@
-name: Auto Rebase PRs (Disabled)
+name: Force Merge PRs to Main (Overwrite Mode)
 
 on:
-  workflow_dispatch:
+  schedule:
+    - cron: '0 * * * *' # 每小时运行
+  workflow_dispatch: # 手动触发
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 jobs:
-  disabled:
-    if: ${{ false }}
+  force-merge:
     runs-on: ubuntu-latest
     steps:
-      - name: Disabled by policy
-        run: echo "This workflow is intentionally disabled to prevent overwrite merges into main."
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: main         # 直接检出 main 分支
+          fetch-depth: 0    #以此获取完整历史，方便合并
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Git Identity
+        run: |
+          git config --global user.name "Auto Merge Bot"
+          git config --global user.email "bot@example.com"
+
+      - name: Fetch PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 获取所有 Open 状态的 PR 编号
+          gh pr list --state open --json number --jq '.[].number' > pr_numbers.txt
+          echo "待处理的 PR 列表:"
+          cat pr_numbers.txt
+
+      - name: Merge PRs (Theirs Wins)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 确保我们在 main 分支
+          git checkout main
+
+          while read number; do
+            echo "=========================================="
+            echo "Processing PR #$number"
+            
+            # 1. 检出 PR 到本地的一个临时分支
+            # gh pr checkout 会自动把 PR 拉取为本地分支
+            gh pr checkout $number
+            PR_BRANCH=$(git branch --show-current)
+            echo "PR Branch Name: $PR_BRANCH"
+            
+            # 2. 切回 Main 准备合并
+            git checkout main
+            
+            # 3. 【核心步骤】合并并强制覆盖
+            # --no-ff: 强制生成合并提交节点，方便回溯
+            # -X theirs: 遇到冲突时，无条件使用“他们的”(即 PR 分支)的内容，丢弃 main 的冲突内容
+            echo "Merging $PR_BRANCH into main with strategy 'theirs'..."
+            
+            if git merge --no-ff -X theirs "$PR_BRANCH" -m "Auto merge PR #$number (Force Overwrite)"; then
+              echo "✅ Merge successful."
+              
+              # 4. 推送到远程 Main
+              # 注意：如果这期间有人提交了代码，可能需要 pull，这里直接 push
+              git push origin main
+              echo "🚀 Pushed to main."
+              
+              # 可选：合并后关闭 PR (如果你想关掉它)
+              # gh pr close $number --comment "Auto merged via workflow."
+            else
+              echo "❌ Merge failed for some reason. Aborting this merge."
+              git merge --abort
+            fi
+
+          done < pr_numbers.txt
