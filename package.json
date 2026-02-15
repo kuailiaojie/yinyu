@@ -14,7 +14,11 @@
     "lint": "ESLINT_USE_FLAT_CONFIG=false eslint . --ext .ts,.tsx",
     "ci-build": "npm run lint && npm run test && npm run build",
     "e2e": "playwright test",
-    "e2e:headed": "playwright test --headed"
+    "e2e:headed": "playwright test --headed",
+    "test:unit": "vitest run",
+    "test:server": "tsx --test test/index.test.ts server/index.test.ts",
+    "test:fast": "npm run lint && npm run test:unit && npm run test:server",
+    "e2e:smoke": "playwright test e2e/search-playback-smoke.spec.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.13.5",

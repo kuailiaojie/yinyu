@@ -1,0 +1,48 @@
+name: CI Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main, work]
+
+jobs:
+  fast-tests:
+    name: Fast tests (required)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run fast test layer
+        run: npm run test:fast
+
+  e2e-smoke:
+    name: E2E smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run smoke e2e
+        run: npm run e2e:smoke

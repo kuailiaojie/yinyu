@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Box, Chip, List, ListItemButton, TextField, Typography } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 import { useLocale } from '../../i18n/LocaleProvider';
+import { usePlayerStore } from '../player/PlayerStore';
 import { searchMusic } from './api/tuneProxy';
 import { dedupeMusicItems } from './utils/dedupe';
 import type { Platform } from './types';
@@ -11,11 +13,27 @@ export default function SearchPage() {
   const [q, setQ] = useState('');
   const [items, setItems] = useState<ReturnType<typeof dedupeMusicItems>>([]);
   const { t } = useLocale();
+  const navigate = useNavigate();
+  const setQueue = usePlayerStore((state) => state.setQueue);
 
   const onSearch = async () => {
     if (!q.trim()) return;
     const found = await searchMusic(q, platforms);
     setItems(dedupeMusicItems(found));
+  };
+
+  const onPickGroup = (groupKey: string) => {
+    const queue = items.map((group) => ({
+      id: group.canonical.id,
+      title: group.canonical.title,
+      artist: group.canonical.artist,
+    }));
+    const selectedIndex = items.findIndex((group) => group.key === groupKey);
+    setQueue(queue, selectedIndex >= 0 ? selectedIndex : 0);
+    const selectedTrackId = items[selectedIndex]?.canonical.id;
+    if (selectedTrackId) {
+      navigate(`/player/${selectedTrackId}`);
+    }
   };
 
   return (
@@ -30,7 +48,7 @@ export default function SearchPage() {
       />
       <List>
         {items.map((g) => (
-          <ListItemButton key={g.key}>
+          <ListItemButton key={g.key} onClick={() => onPickGroup(g.key)}>
             <Box>
               <Typography>{g.canonical.title}</Typography>
               <Typography variant="body2">{g.canonical.artist}</Typography>
