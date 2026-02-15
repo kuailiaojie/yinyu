@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Stack } from '@mui/material';
 import { useParams } from 'react-router-dom';
 import AppShell from '../components/AppShell';
@@ -15,7 +15,7 @@ const mock = [
 
 export default function PlayerPage() {
   const { id } = useParams<{ id: string }>();
-  const { setTrack, play } = usePlayerStore();
+  const { setTrack, play, queue, currentIndex, trackId } = usePlayerStore();
 
   useEffect(() => {
     if (id) {
@@ -24,10 +24,21 @@ export default function PlayerPage() {
     }
   }, [id, setTrack, play]);
 
+  const activeTrack = useMemo(() => {
+    if (!queue.length) return undefined;
+    if (trackId) {
+      const byId = queue.find((track) => track.id === trackId);
+      if (byId) return byId;
+    }
+    return queue[currentIndex];
+  }, [queue, currentIndex, trackId]);
 
   return (
     <AppShell>
-      <PageHeader title="Now Playing" subtitle="歌词与播放控制采用统一卡片层级。" />
+      <PageHeader
+        title="Now Playing"
+        subtitle={activeTrack ? `${activeTrack.title ?? '未知歌曲'} · ${activeTrack.artist ?? '未知歌手'}` : '请选择一首歌曲开始播放'}
+      />
       <Stack spacing={2}>
         <SectionCard sx={{ p: 2 }}>
           <LyricsView
