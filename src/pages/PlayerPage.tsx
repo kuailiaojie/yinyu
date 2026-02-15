@@ -33,8 +33,6 @@ export default function PlayerPage() {
           <LyricsView
             lines={mock}
             currentMs={900}
-            title={activeTrack?.title ?? '未选择歌曲'}
-            artist={activeTrack?.artist ?? '请选择一首歌曲开始播放'}
           />
         </SectionCard>
         <SectionCard sx={{ p: 2 }}>
