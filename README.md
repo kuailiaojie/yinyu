@@ -68,3 +68,10 @@ npm run tauri:dev
 ## 版权说明
 
 本项目仅用于技术研究与 UI/工程实践示例。音乐音频、歌词、封面等内容请遵守对应平台版权与使用条款。
+
+
+## Tauri 工程结构
+
+- 当前仓库使用根目录 `tauri.conf.json` + `src-tauri/` Rust 工程（`Cargo.toml` 在仓库根目录）。
+- `npm run tauri:build` 会先执行 `npm run build`，再打 Linux `deb/rpm` 包。
+- 如需 AppImage，可在 `tauri.conf.json` 的 `bundle.targets` 中额外开启并确保 linuxdeploy 环境完整。
