@@ -2,6 +2,25 @@
 
 基于 React + TypeScript + Vite 的多平台音乐播放器（Web + Tauri Desktop）。项目按 `project.md` 实现动态主题、聚合搜索、歌词页、波浪进度条、播放器状态管理与 CI/CD。
 
+## 产品功能矩阵
+
+| 功能 | Web | Desktop (Tauri) | 说明 |
+| --- | --- | --- | --- |
+| 搜索 | ✅ 已支持 | ✅ 已支持 | `SearchPage` 走 `server/index.ts` 代理聚合多平台检索。 |
+| 播放 | ✅ 已支持 | ✅ 已支持 | `PlayerControls` + `/api/tune/song` 提供播放 URL。 |
+| 歌词 | ✅ 已支持 | ✅ 已支持 | `LyricsView` + `/api/tune/lyrics` 支持逐词/逐行展示。 |
+| 榜单 | 🟡 基础占位 | 🟡 基础占位 | 已有 `/charts` 页面路由，当前为占位文案。 |
+| 设置 | ✅ 已支持 | ✅ 已支持 | 语言切换、主题种子色在设置页可用。 |
+
+> 桌面端基于同一套前端路由与组件，功能可用性与 Web 基本保持一致。
+
+## 项目结构导览
+
+- `src/features/*`：按业务域组织核心功能模块（如 `search`、`player`），包含状态管理、API 适配与特性级 UI。
+- `src/components/*`：可复用通用组件（如导航、歌词视图、波浪进度条），供页面与 features 组合使用。
+- `server/*`：Node/Express 代理层，负责上游 API 聚合、字段映射、限流与缓存。
+- `src-tauri/*`：桌面端 Rust 壳层，负责打包、窗口与平台集成能力。
+
 ## Quickstart
 
 ### 1) 安装依赖
@@ -28,6 +47,38 @@ npm run server:dev
 npm run tauri:dev
 ```
 
+## 本地开发一键流程
+
+### 组合 A：仅前端联调（最快）
+
+```bash
+npm run dev
+```
+
+- 前端默认端口：`5173`（Vite 默认值）。
+- 适合纯 UI/交互开发。
+
+### 组合 B：前端 + 代理 API
+
+```bash
+npm run server:dev
+npm run dev
+```
+
+- 代理默认端口：`3000`（可用 `PORT` 覆盖）。
+- 前端默认端口：`5173`。
+- 推荐在搜索/播放/歌词联调时使用。
+
+### 组合 C：Tauri 桌面联调（含前端）
+
+```bash
+npm run server:dev
+npm run tauri:dev
+```
+
+- Tauri 会先执行前端构建/开发流程并加载桌面壳。
+- 若需后端能力，仍需单独启动代理（默认 `3000`）。
+
 ## 环境变量
 
 参考 `.env.example`（可复制为 `.env`）：
@@ -47,9 +98,57 @@ npm run tauri:dev
 - `npm run tauri:build`：构建桌面安装包
 - `npm run ci-build`：CI 本地等价检查
 
+## 测试策略
+
+### 1) 单元测试（逻辑函数）
+
+- 范围：纯函数与数据处理逻辑（例如去重、主题计算等）。
+- 命令：
+
+```bash
+npm run test
+```
+
+### 2) 组件测试（UI 行为）
+
+- 范围：关键组件渲染、交互与可访问性（如 `WaveProgress`、主题切换相关组件）。
+- 命令：
+
+```bash
+npm run test
+```
+
+### 3) E2E 测试（核心用户路径）
+
+- 范围：页面导航、路由可达、核心流程烟囱测试。
+- 命令：
+
+```bash
+npm run e2e
+```
+
+- 说明：Playwright 测试使用独立端口 `4173` 启动测试专用前端服务。
+
 ## API 与映射约定
 
 上游 API 规范来源于根目录 `api.md`，代理实现位于 `server/index.ts`，字段映射文档位于 `server/README.md`。当 `api.md` 字段变化时，请优先更新 `server/mappings.ts` 和 `server/README.md`。
+
+## 发布流程
+
+1. **准备版本**：更新版本号与变更说明，确保 `npm run ci-build` 通过。
+2. **打 Tag**：在 `main` 上创建并推送 `v*` tag（如 `v0.1.1`）。
+3. **触发工作流**：`release.yml` 会在 tag push 或 release published 时触发。
+4. **矩阵构建**：分别在 `ubuntu/macos/windows` 上执行 lint、test、build、tauri build。
+5. **产物上传**：构建结果上传到 GitHub Actions artifact，同时由 `tauri-action` 生成 draft release 附件。
+6. **签名与发布**：配置 `TAURI_SIGNING_PRIVATE_KEY` 与 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 后生成签名产物，验证无误后发布 release。
+7. **产物下载**：从 GitHub Release 或 Actions Artifacts 下载对应平台安装包与更新清单（如 `latest.json`）。
+
+### 常见失败排查
+
+- `job skipped`：检查 `TAURI_BUILD` secret 是否为 `true`。
+- `signing failed`：检查私钥内容、换行格式与密码是否匹配。
+- `tauri build failed`：确认本地 `npm run build` 可通过，且 Rust toolchain 与平台依赖已安装。
+- `updater metadata missing`：确认 `includeUpdaterJson` 未被禁用，且上传路径包含 `latest.json`。
 
 ## CI/CD 与发布
 
@@ -64,6 +163,18 @@ npm run tauri:dev
 - `TAURI_SIGNING_PRIVATE_KEY`
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
 - (可选) 平台签名相关密钥
+
+## 安全与合规
+
+- **API Key 管理**：
+  - 严禁将真实 `TUNE_API_KEY` 提交到仓库；仅通过本地 `.env` 或 CI secrets 注入。
+  - 新增 key 后建议轮换旧 key，并设置最小权限与调用配额。
+- **版权声明**：
+  - 本项目仅用于技术研究与工程实践。
+  - 音频、歌词、封面等内容需遵守数据来源平台的版权政策与使用条款。
+- **日志脱敏原则**：
+  - 日志中不得输出 API key、用户凭据、完整请求头。
+  - 错误日志优先记录错误类别与追踪 ID，避免输出完整上游响应体中的敏感字段。
 
 ## 版权说明
 
