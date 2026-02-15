@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { List, TextField } from '@mui/material';
 import AppShell from '../../components/AppShell';
 import EmptyState from '../../components/EmptyState';
@@ -64,7 +65,7 @@ export default function SearchPage() {
                 title={g.canonical.title}
                 subtitle={g.canonical.artist}
                 chips={g.variants.map((v) => v.platform)}
-                onClick={() => undefined}
+                onClick={() => onPickGroup(g.key)}
               />
             ))}
           </List>
