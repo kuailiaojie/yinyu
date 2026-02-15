@@ -1,4 +1,4 @@
-import { Box, Button, Stack } from '@mui/material';
+import { Box, Button } from '@mui/material';
 import WaveProgress from '../../components/WaveProgress';
 import { usePlayerStore } from './PlayerStore';
 

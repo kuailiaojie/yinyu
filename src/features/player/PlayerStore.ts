@@ -1,10 +1,4 @@
 import { create } from 'zustand';
-import type { MusicItem } from '../search/types';
-
-export type RepeatMode = 'off' | 'one' | 'all';
-
-export type QueueTrack = MusicItem;
-
 export type RepeatMode = 'off' | 'all' | 'one';
 
 export type QueueTrack = {

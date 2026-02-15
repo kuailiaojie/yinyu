@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { Stack } from '@mui/material';
+import { useParams } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import PageHeader from '../components/PageHeader';
 import SectionCard from '../components/SectionCard';
@@ -13,7 +15,7 @@ const mock = [
 
 export default function PlayerPage() {
   const { id } = useParams<{ id: string }>();
-  const { queue, trackId, setTrack, play } = usePlayerStore();
+  const { setTrack, play } = usePlayerStore();
 
   useEffect(() => {
     if (id) {
@@ -22,7 +24,6 @@ export default function PlayerPage() {
     }
   }, [id, setTrack, play]);
 
-  const activeTrack = queue.find((track) => track.id === (trackId ?? id));
 
   return (
     <AppShell>
