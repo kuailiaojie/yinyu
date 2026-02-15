@@ -47,6 +47,16 @@ npm run tauri:dev
 - `npm run tauri:build`：构建桌面安装包
 - `npm run ci-build`：CI 本地等价检查
 
+
+## Design System
+
+- 设计令牌集中在 `src/theme/designTokens.ts`，按语义分层命名：`spacing.*`（间距）、`radius.*`（圆角）、`elevation.*`（阴影层级）、`glass.*`（毛玻璃）、`motion.*`（动画时长与缓动）、`typographyScale.*`（字号与字重）。
+- 页面优先复用 `src/components/` primitives（`AppShell`, `SectionCard`, `GlassPanel`, `PageHeader`, `EmptyState`, `MusicListItem`），业务页面只负责数据与交互，不重复定义视觉样式。
+- 页面视觉改动流程：
+  1. 优先调整 design tokens，再同步 primitives。
+  2. 确认暗色/浅色背景对比度与焦点可见性。
+  3. 更新页面截图（建议包含 Home / Search / Settings 关键页）并随 PR 一起提交。
+
 ## API 与映射约定
 
 上游 API 规范来源于根目录 `api.md`，代理实现位于 `server/index.ts`，字段映射文档位于 `server/README.md`。当 `api.md` 字段变化时，请优先更新 `server/mappings.ts` 和 `server/README.md`。
