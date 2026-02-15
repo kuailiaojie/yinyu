@@ -20,6 +20,9 @@ export function DynamicThemeProvider({ children }: PropsWithChildren) {
           primary: { main: tokens['--md-sys-color-primary'] },
           background: { default: tokens['--md-sys-color-surface'] },
           text: { primary: tokens['--md-sys-color-on-surface'] }
+        },
+        typography: {
+          fontFamily: '"PingFang SC", "Microsoft YaHei", "Noto Sans SC", Inter, Roboto, Helvetica, Arial, sans-serif'
         }
       }),
     [tokens]

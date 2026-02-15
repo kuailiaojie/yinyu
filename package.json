@@ -11,7 +11,7 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "test": "vitest run",
-    "lint": "eslint . --ext .ts,.tsx",
+    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint . --ext .ts,.tsx",
     "ci-build": "npm run lint && npm run test && npm run build",
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed"
@@ -40,6 +40,8 @@
     "@types/node": "^22.9.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@typescript-eslint/eslint-plugin": "^8.55.0",
+    "@typescript-eslint/parser": "^8.55.0",
     "@vitejs/plugin-react": "^4.3.3",
     "eslint": "^9.15.0",
     "eslint-config-prettier": "^9.1.0",
