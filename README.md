@@ -1,4 +1,4 @@
-# yinyu-music-app
+# yinyu-music-app 
 
 基于 React + TypeScript + Vite 的多平台音乐播放器（Web + Tauri Desktop）。项目按 `project.md` 实现动态主题、聚合搜索、歌词页、波浪进度条、播放器状态管理与 CI/CD。
 
