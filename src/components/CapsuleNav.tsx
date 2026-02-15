@@ -20,24 +20,23 @@ export default function CapsuleNav() {
         position: 'fixed',
         zIndex: 20,
         display: 'flex',
-        gap: 1,
+        gap: 0.75,
         p: 1,
-        border: '1px solid',
-        borderColor: 'divider',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
-        backdropFilter: 'blur(16px)',
-        bgcolor: 'rgba(255,255,255,0.72)',
-        borderRadius: { xs: 999, md: 3 },
-        left: { xs: '50%', md: 20 },
-        bottom: { xs: 12, md: 'auto' },
-        top: { xs: 'auto', md: 20 },
+        borderRadius: 3,
+        border: '1px solid rgba(255,255,255,0.14)',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.22)',
+        bgcolor: 'rgba(20,23,30,0.72)',
+        backdropFilter: 'blur(14px)',
+        left: { xs: '50%', md: 16 },
+        bottom: { xs: 14, md: 'auto' },
+        top: { xs: 'auto', md: 16 },
         transform: { xs: 'translateX(-50%)', md: 'none' },
         flexDirection: { xs: 'row', md: 'column' },
-        minWidth: { xs: 'auto', md: 240 },
+        minWidth: { xs: 'auto', md: 228 },
       }}
     >
-      <Typography variant="overline" sx={{ px: 1.5, color: 'text.secondary', display: { xs: 'none', md: 'block' } }}>
-        Yinyu Music
+      <Typography variant="overline" sx={{ px: 1, color: 'rgba(255,255,255,0.78)', display: { xs: 'none', md: 'block' } }}>
+        音愈 Yinyu
       </Typography>
       {items.map(([label, to]) => (
         <Button
@@ -45,16 +44,21 @@ export default function CapsuleNav() {
           component={NavLink}
           to={to}
           sx={{
+            color: 'white',
             justifyContent: { xs: 'center', md: 'flex-start' },
-            px: { xs: 1.2, md: 1.6 },
             borderRadius: 2,
-            textTransform: 'none',
+            px: { xs: 1.1, md: 1.5 },
+            minWidth: { xs: 0, md: 'auto' },
             '&.active': {
-              bgcolor: 'primary.main',
-              color: 'primary.contrastText',
-              '&:hover': { bgcolor: 'primary.dark' },
+              bgcolor: 'rgba(255,255,255,0.14)',
             },
-            '&:focus-visible': { outline: '2px solid var(--md-sys-color-primary)' },
+            '&:hover': {
+              bgcolor: 'rgba(255,255,255,0.1)',
+            },
+            '&:focus-visible': {
+              outline: '2px solid var(--md-sys-color-primary)',
+              outlineOffset: 2,
+            },
           }}
         >
           {label}

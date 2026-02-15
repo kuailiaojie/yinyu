@@ -1,4 +1,4 @@
-import { Avatar, Box, Card, CardContent, Chip, Divider, List, ListItem, ListItemAvatar, ListItemText, Stack, Typography } from '@mui/material';
+import { Avatar, Box, Card, Chip, Divider, List, ListItem, ListItemAvatar, ListItemText, Stack, Typography } from '@mui/material';
 import Grid from '@mui/material/Grid2';
 import { useLocale } from '../i18n/LocaleProvider';
 
@@ -10,9 +10,9 @@ const recentTracks = [
 ];
 
 const recommendedPlaylists = [
-  { name: '华语通勤精选', desc: '早高峰轻快节奏，告别犯困', tags: ['流行', '轻松', '早高峰'] },
-  { name: '夜间电子氛围', desc: '适合深夜写代码和独处时刻', tags: ['电子', 'Chill', '深夜'] },
-  { name: '经典港乐回忆', desc: '80/90 年代必听粤语金曲', tags: ['粤语', '经典', '90s'] },
+  { name: '华语通勤精选', desc: '适合上班路上的轻快流行集合', tags: ['流行', '轻松', '早高峰'] },
+  { name: '夜间电子氛围', desc: '低饱和电子与氛围感节奏', tags: ['电子', 'Chill', '深夜'] },
+  { name: '经典港乐回忆', desc: '80-00 年代粤语金曲回顾', tags: ['粤语', '经典', '90s'] },
 ];
 
 export default function Home() {
@@ -22,66 +22,66 @@ export default function Home() {
     <Box p={{ xs: 2, md: 3 }}>
       <Card
         sx={{
+          p: { xs: 2, md: 3 },
           mb: 2,
           borderRadius: 4,
-          color: '#fff',
-          background: 'linear-gradient(120deg, #6750A4 0%, #8A72D7 45%, #4A3D9E 100%)',
+          color: 'white',
+          background: 'linear-gradient(135deg, #6f5ce7 0%, #4a7ff5 45%, #22a6f2 100%)',
+          boxShadow: '0 20px 40px rgba(37,79,185,0.28)',
         }}
       >
-        <CardContent sx={{ py: 3 }}>
-          <Typography variant="h4" fontWeight={800}>
-            {t('appTitle')}
-          </Typography>
-          <Typography sx={{ opacity: 0.88 }}>{t('appSubtitle')}</Typography>
-        </CardContent>
+        <Typography variant="h4" fontWeight={800}>
+          {t('appTitle')}
+        </Typography>
+        <Typography sx={{ opacity: 0.92, mt: 0.8 }}>{t('appSubtitle')}</Typography>
       </Card>
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
           <Card variant="outlined" sx={{ borderRadius: 3 }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom fontWeight={700}>
+            <Box px={2} pt={2}>
+              <Typography variant="h6" fontWeight={700}>
                 {t('recentHistory')}
               </Typography>
-              <List disablePadding>
-                {recentTracks.map((track, index) => (
-                  <Box key={`${track.title}-${track.time}`}>
-                    <ListItem disableGutters>
-                      <ListItemAvatar>
-                        <Avatar sx={{ bgcolor: 'primary.light' }}>{track.title[0]}</Avatar>
-                      </ListItemAvatar>
-                      <ListItemText primary={`${track.title} · ${track.artist}`} secondary={`${t('continueListening')} · ${track.time}`} />
-                    </ListItem>
-                    {index < recentTracks.length - 1 && <Divider />}
-                  </Box>
-                ))}
-              </List>
-            </CardContent>
+            </Box>
+            <List sx={{ px: 1.5, pb: 1.5 }}>
+              {recentTracks.map((track, index) => (
+                <Box key={`${track.title}-${track.time}`}>
+                  <ListItem disableGutters sx={{ px: 1 }}>
+                    <ListItemAvatar>
+                      <Avatar sx={{ bgcolor: '#5e6ad2' }}>{track.title.slice(0, 1)}</Avatar>
+                    </ListItemAvatar>
+                    <ListItemText primary={`${track.title} · ${track.artist}`} secondary={`${t('continueListening')} · ${track.time}`} />
+                  </ListItem>
+                  {index < recentTracks.length - 1 && <Divider component="li" />}
+                </Box>
+              ))}
+            </List>
           </Card>
         </Grid>
 
         <Grid size={{ xs: 12, md: 6 }}>
-          <Card variant="outlined" sx={{ borderRadius: 3 }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom fontWeight={700}>
+          <Card variant="outlined" sx={{ borderRadius: 3, height: '100%' }}>
+            <Box px={2} pt={2}>
+              <Typography variant="h6" fontWeight={700}>
                 {t('recommendedPlaylists')}
               </Typography>
-              <Stack spacing={1.2}>
-                {recommendedPlaylists.map((playlist) => (
-                  <Box key={playlist.name} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2.5, p: 1.5 }}>
-                    <Typography fontWeight={700}>{playlist.name}</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      {playlist.desc}
-                    </Typography>
-                    <Box display="flex" gap={1} flexWrap="wrap">
-                      {playlist.tags.map((tag) => (
-                        <Chip key={`${playlist.name}-${tag}`} size="small" label={tag} variant="outlined" />
-                      ))}
-                    </Box>
+            </Box>
+            <Stack spacing={1.25} sx={{ p: 2 }}>
+              {recommendedPlaylists.map((playlist) => (
+                <Box key={playlist.name} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2.5, p: 1.5 }}>
+                  <Typography fontWeight={700}>{playlist.name}</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
+                    {playlist.desc}
+                  </Typography>
+                  <Box display="flex" gap={1} mt={1} flexWrap="wrap">
+                    {playlist.tags.map((tag) => (
+                      <Chip key={`${playlist.name}-${tag}`} size="small" label={tag} />
+                    ))}
                   </Box>
-                ))}
-              </Stack>
-            </CardContent>
+                </Box>
+              ))}
+            </Stack>
           </Card>
         </Grid>
       </Grid>

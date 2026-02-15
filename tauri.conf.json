@@ -19,10 +19,7 @@
     ]
   },
   "bundle": {
-    "active": true,
-    "targets": [
-      "deb",
-      "rpm"
-    ]
+    "active": false,
+    "targets": ["deb", "rpm"]
   }
 }
