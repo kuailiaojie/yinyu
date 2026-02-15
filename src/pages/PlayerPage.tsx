@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { Stack } from '@mui/material';
+import { useParams } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import PageHeader from '../components/PageHeader';
 import SectionCard from '../components/SectionCard';
@@ -29,7 +31,12 @@ export default function PlayerPage() {
       <PageHeader title="Now Playing" subtitle="歌词与播放控制采用统一卡片层级。" />
       <Stack spacing={2}>
         <SectionCard sx={{ p: 2 }}>
-          <LyricsView lines={mock} currentMs={900} />
+          <LyricsView
+            lines={mock}
+            currentMs={900}
+            title={activeTrack?.title ?? '未选择歌曲'}
+            artist={activeTrack?.artist ?? '请选择一首歌曲开始播放'}
+          />
         </SectionCard>
         <SectionCard sx={{ p: 2 }}>
           <PlayerControls />
