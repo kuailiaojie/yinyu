@@ -152,17 +152,54 @@ npm run e2e
 
 ## CI/CD 与发布
 
-- 工作流：`.github/workflows/release.yml`
-- 触发：`main` 分支 push、`v*` tag、GitHub release published
-- 通过矩阵构建 `ubuntu / macOS / windows`
-- 仅当 `TAURI_BUILD=true` secret 生效时执行 Tauri 构建
+### 工作流拆分
 
-推荐 secrets：
+- `.github/workflows/ci.yml`：PR/分支的 lint、unit、e2e-smoke、build。
+- `.github/workflows/release.yml`：仅 `v*` tag push 或 Release Published 时触发，执行 Tauri 发布。
 
-- `TAURI_BUILD`：`true`
+### PR 必过检查（建议配置为 Branch Protection Required Status Checks）
+
+在 `Settings -> Branches -> main` 中将以下 Job 名称配置为 required：
+
+- `lint`
+- `unit`
+- `e2e-smoke`
+- `build`
+- `required-checks`
+
+### Required secrets（发布）
+
+- `TAURI_BUILD`：设置为 `true` 才会执行发布 Job。
+- `TAURI_SIGNING_PRIVATE_KEY`：Tauri updater/安装包签名私钥。
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：私钥密码。
+
+### 常见签名相关变量
+
 - `TAURI_SIGNING_PRIVATE_KEY`
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
-- (可选) 平台签名相关密钥
+- （可选）平台证书相关变量，例如 Apple notarization / Windows 证书密钥（按组织密钥管理策略注入）。
+
+### Tag 发布步骤
+
+1. 确认 `main` 已通过 CI（lint/unit/e2e-smoke/build）。
+2. 本地打 tag 并推送：
+
+   ```bash
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+
+3. GitHub Actions 自动执行 `release.yml`，按平台产出并上传：
+   - `target/release/bundle/**`
+   - `latest.json`
+4. 在 GitHub Release 页面验证安装包与 updater 元数据后再对外公告。
+
+### 回滚流程
+
+1. 立即撤回有问题的 GitHub Release（标记为 draft 或删除附件）。
+2. 若 updater 已指向问题版本，回退 `latest.json` 到上一个稳定 tag 重新发布。
+3. 在 `main` 修复后发布 `vX.Y.(Z+1)`，避免复用问题 tag。
+4. 如需代码回滚，使用 `git revert <bad_commit>` 提交修复，再走完整 CI+tag 流程。
 
 ## 安全与合规
 
