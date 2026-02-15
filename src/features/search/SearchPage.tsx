@@ -1,11 +1,15 @@
 import { useState } from 'react';
-import { Box, Chip, List, ListItemButton, TextField, Typography } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { List, TextField } from '@mui/material';
+import AppShell from '../../components/AppShell';
+import EmptyState from '../../components/EmptyState';
+import MusicListItem from '../../components/MusicListItem';
+import PageHeader from '../../components/PageHeader';
+import SectionCard from '../../components/SectionCard';
 import { useLocale } from '../../i18n/LocaleProvider';
 import { usePlayerStore } from '../player/PlayerStore';
 import { searchMusic } from './api/tuneProxy';
+import type { Platform } from './types';
 import { dedupeMusicItems } from './utils/dedupe';
-import type { GroupedMusicItem, Platform } from './types';
 
 const platforms: Platform[] = ['netease', 'qq', 'kuwo'];
 
@@ -37,30 +41,35 @@ export default function SearchPage() {
   };
 
   return (
-    <Box p={2}>
-      <Typography variant="h5">{t('searchTitle')}</Typography>
-      <TextField
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && onSearch()}
-        fullWidth
-        label={t('searchLabel')}
-      />
-      <List>
-        {items.map((g) => (
-          <ListItemButton key={g.key} onClick={() => onPickGroup(g.key)}>
-            <Box>
-              <Typography>{g.canonical.title}</Typography>
-              <Typography variant="body2">{g.canonical.artist}</Typography>
-              <Box display="flex" gap={1}>
-                {g.variants.map((v) => (
-                  <Chip key={`${v.platform}-${v.id}`} size="small" label={v.platform} />
-                ))}
-              </Box>
-            </Box>
-          </ListItemButton>
-        ))}
-      </List>
-    </Box>
+    <AppShell>
+      <PageHeader title={t('searchTitle')} subtitle="跨平台聚合结果，统一去重展示。" />
+      <SectionCard sx={{ p: 2.5 }}>
+        <TextField
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && onSearch()}
+          fullWidth
+          label={t('searchLabel')}
+        />
+      </SectionCard>
+
+      <SectionCard>
+        {items.length === 0 ? (
+          <EmptyState title="输入关键词开始搜索" description="支持网易云 / QQ 音乐 / 酷我聚合检索。" />
+        ) : (
+          <List sx={{ px: 1.5, py: 1.5 }}>
+            {items.map((g) => (
+              <MusicListItem
+                key={g.key}
+                title={g.canonical.title}
+                subtitle={g.canonical.artist}
+                chips={g.variants.map((v) => v.platform)}
+                onClick={() => undefined}
+              />
+            ))}
+          </List>
+        )}
+      </SectionCard>
+    </AppShell>
   );
 }

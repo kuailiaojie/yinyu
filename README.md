@@ -98,36 +98,15 @@ npm run tauri:dev
 - `npm run tauri:build`：构建桌面安装包
 - `npm run ci-build`：CI 本地等价检查
 
-## 测试策略
 
-### 1) 单元测试（逻辑函数）
+## Design System
 
-- 范围：纯函数与数据处理逻辑（例如去重、主题计算等）。
-- 命令：
-
-```bash
-npm run test
-```
-
-### 2) 组件测试（UI 行为）
-
-- 范围：关键组件渲染、交互与可访问性（如 `WaveProgress`、主题切换相关组件）。
-- 命令：
-
-```bash
-npm run test
-```
-
-### 3) E2E 测试（核心用户路径）
-
-- 范围：页面导航、路由可达、核心流程烟囱测试。
-- 命令：
-
-```bash
-npm run e2e
-```
-
-- 说明：Playwright 测试使用独立端口 `4173` 启动测试专用前端服务。
+- 设计令牌集中在 `src/theme/designTokens.ts`，按语义分层命名：`spacing.*`（间距）、`radius.*`（圆角）、`elevation.*`（阴影层级）、`glass.*`（毛玻璃）、`motion.*`（动画时长与缓动）、`typographyScale.*`（字号与字重）。
+- 页面优先复用 `src/components/` primitives（`AppShell`, `SectionCard`, `GlassPanel`, `PageHeader`, `EmptyState`, `MusicListItem`），业务页面只负责数据与交互，不重复定义视觉样式。
+- 页面视觉改动流程：
+  1. 优先调整 design tokens，再同步 primitives。
+  2. 确认暗色/浅色背景对比度与焦点可见性。
+  3. 更新页面截图（建议包含 Home / Search / Settings 关键页）并随 PR 一起提交。
 
 ## API 与映射约定
 
