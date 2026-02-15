@@ -5,139 +5,101 @@ export type RepeatMode = 'off' | 'one' | 'all';
 
 export type QueueTrack = MusicItem;
 
+export type RepeatMode = 'off' | 'all' | 'one';
+
+export type QueueTrack = {
+  id: string;
+  title?: string;
+  artist?: string;
+};
+
 type PlayerState = {
   queue: QueueTrack[];
   currentIndex: number;
-  currentTrack?: QueueTrack;
+  trackId?: string;
   playing: boolean;
-  durationMs: number;
-  currentMs: number;
-  buffered: number;
-  loading: boolean;
-  error?: string;
-  volume: number;
-  repeat: RepeatMode;
-  shuffle: boolean;
-  setQueue: (queue: QueueTrack[], startIndex?: number) => void;
-  playTrack: (trackId: string) => void;
+  progress: number;
+  mode: RepeatMode;
+  favorites: string[];
+  setQueue: (tracks: QueueTrack[], startIndex?: number) => void;
+  setTrack: (id: string) => void;
   next: () => void;
   prev: () => void;
-  setVolume: (value: number) => void;
-  setRepeat: (mode: RepeatMode) => void;
-  setShuffle: (enabled: boolean) => void;
-  setPlaying: (playing: boolean) => void;
-  setDurationMs: (ms: number) => void;
-  setCurrentMs: (ms: number) => void;
-  setBuffered: (progress: number) => void;
-  setLoading: (loading: boolean) => void;
-  setError: (error?: string) => void;
+  toggleMode: () => void;
+  toggleFavorite: (trackId?: string) => void;
+  play: () => void;
+  pause: () => void;
+  seek: (p: number) => void;
 };
 
-function clamp(n: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, n));
-}
-
-function resolveTrack(queue: QueueTrack[], index: number): QueueTrack | undefined {
-  if (index < 0 || index >= queue.length) return undefined;
-  return queue[index];
-}
+const MODES: RepeatMode[] = ['off', 'all', 'one'];
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   queue: [],
-  currentIndex: -1,
-  currentTrack: undefined,
+  currentIndex: 0,
   playing: false,
-  durationMs: 0,
-  currentMs: 0,
-  buffered: 0,
-  loading: false,
-  error: undefined,
-  volume: 0.8,
-  repeat: 'off',
-  shuffle: false,
-  setQueue: (queue, startIndex = 0) => {
-    const index = queue.length ? clamp(startIndex, 0, queue.length - 1) : -1;
-    set({
-      queue,
-      currentIndex: index,
-      currentTrack: resolveTrack(queue, index),
-      currentMs: 0,
-      durationMs: 0,
-      buffered: 0,
-      error: undefined,
-    });
-  },
-  playTrack: (trackId) => {
-    const queue = get().queue;
-    const index = queue.findIndex((track) => track.id === trackId);
-    if (index < 0) return;
-    set({
-      currentIndex: index,
-      currentTrack: queue[index],
-      currentMs: 0,
-      durationMs: 0,
-      buffered: 0,
-      error: undefined,
-      playing: true,
-    });
-  },
-  next: () => {
-    const { queue, currentIndex, repeat, shuffle } = get();
-    if (!queue.length) return;
-
-    let nextIndex = currentIndex + 1;
-    if (shuffle && queue.length > 1) {
-      do {
-        nextIndex = Math.floor(Math.random() * queue.length);
-      } while (nextIndex === currentIndex);
-    }
-
-    if (nextIndex >= queue.length) {
-      if (repeat === 'all') nextIndex = 0;
-      else if (repeat === 'one') nextIndex = currentIndex;
-      else {
-        set({ playing: false });
-        return;
+  progress: 0,
+  mode: 'off',
+  favorites: [],
+  setQueue: (queue, startIndex = 0) =>
+    set(() => {
+      if (!queue.length) {
+        return { queue: [], currentIndex: 0, trackId: undefined, progress: 0 };
       }
-    }
-
-    set({
-      currentIndex: nextIndex,
-      currentTrack: queue[nextIndex],
-      currentMs: 0,
-      durationMs: 0,
-      buffered: 0,
-      error: undefined,
-      playing: true,
-    });
+      const boundedIndex = Math.min(Math.max(startIndex, 0), queue.length - 1);
+      return {
+        queue,
+        currentIndex: boundedIndex,
+        trackId: queue[boundedIndex]?.id,
+        progress: 0,
+      };
+    }),
+  setTrack: (trackId) =>
+    set((state) => {
+      const index = state.queue.findIndex((track) => track.id === trackId);
+      return { trackId, currentIndex: index >= 0 ? index : state.currentIndex, progress: 0 };
+    }),
+  next: () =>
+    set((state) => {
+      if (!state.queue.length) return {};
+      if (state.mode === 'one') return { progress: 0 };
+      const atLast = state.currentIndex >= state.queue.length - 1;
+      if (atLast && state.mode !== 'all') return {};
+      const nextIndex = atLast ? 0 : state.currentIndex + 1;
+      return {
+        currentIndex: nextIndex,
+        trackId: state.queue[nextIndex]?.id,
+        progress: 0,
+      };
+    }),
+  prev: () =>
+    set((state) => {
+      if (!state.queue.length) return {};
+      if (state.mode === 'one') return { progress: 0 };
+      const atFirst = state.currentIndex <= 0;
+      if (atFirst && state.mode !== 'all') return {};
+      const prevIndex = atFirst ? state.queue.length - 1 : state.currentIndex - 1;
+      return {
+        currentIndex: prevIndex,
+        trackId: state.queue[prevIndex]?.id,
+        progress: 0,
+      };
+    }),
+  toggleMode: () => {
+    const current = get().mode;
+    const idx = MODES.indexOf(current);
+    set({ mode: MODES[(idx + 1) % MODES.length] });
   },
-  prev: () => {
-    const { queue, currentIndex, repeat } = get();
-    if (!queue.length) return;
-
-    let prevIndex = currentIndex - 1;
-    if (prevIndex < 0) {
-      if (repeat === 'all') prevIndex = queue.length - 1;
-      else prevIndex = 0;
-    }
-
-    set({
-      currentIndex: prevIndex,
-      currentTrack: queue[prevIndex],
-      currentMs: 0,
-      durationMs: 0,
-      buffered: 0,
-      error: undefined,
-      playing: true,
-    });
-  },
-  setVolume: (value) => set({ volume: clamp(value, 0, 1) }),
-  setRepeat: (mode) => set({ repeat: mode }),
-  setShuffle: (enabled) => set({ shuffle: enabled }),
-  setPlaying: (playing) => set({ playing }),
-  setDurationMs: (ms) => set({ durationMs: Math.max(0, ms) }),
-  setCurrentMs: (ms) => set({ currentMs: Math.max(0, ms) }),
-  setBuffered: (progress) => set({ buffered: clamp(progress, 0, 1) }),
-  setLoading: (loading) => set({ loading }),
-  setError: (error) => set({ error }),
+  toggleFavorite: (trackId) =>
+    set((state) => {
+      const id = trackId ?? state.trackId;
+      if (!id) return {};
+      if (state.favorites.includes(id)) {
+        return { favorites: state.favorites.filter((favoriteId) => favoriteId !== id) };
+      }
+      return { favorites: [...state.favorites, id] };
+    }),
+  play: () => set({ playing: true }),
+  pause: () => set({ playing: false }),
+  seek: (progress) => set({ progress })
 }));

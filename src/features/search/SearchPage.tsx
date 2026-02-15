@@ -14,7 +14,7 @@ export default function SearchPage() {
   const [items, setItems] = useState<ReturnType<typeof dedupeMusicItems>>([]);
   const { t } = useLocale();
   const navigate = useNavigate();
-  const { setQueue, playTrack } = usePlayerStore();
+  const setQueue = usePlayerStore((state) => state.setQueue);
 
   const onSearch = async () => {
     if (!q.trim()) return;
@@ -22,11 +22,18 @@ export default function SearchPage() {
     setItems(dedupeMusicItems(found));
   };
 
-  const onPlayGroup = (group: GroupedMusicItem) => {
-    if (!group.variants.length) return;
-    setQueue(group.variants, 0);
-    playTrack(group.variants[0].id);
-    navigate(`/player/${group.variants[0].id}`);
+  const onPickGroup = (groupKey: string) => {
+    const queue = items.map((group) => ({
+      id: group.canonical.id,
+      title: group.canonical.title,
+      artist: group.canonical.artist,
+    }));
+    const selectedIndex = items.findIndex((group) => group.key === groupKey);
+    setQueue(queue, selectedIndex >= 0 ? selectedIndex : 0);
+    const selectedTrackId = items[selectedIndex]?.canonical.id;
+    if (selectedTrackId) {
+      navigate(`/player/${selectedTrackId}`);
+    }
   };
 
   return (
@@ -41,7 +48,7 @@ export default function SearchPage() {
       />
       <List>
         {items.map((g) => (
-          <ListItemButton key={g.key} onClick={() => onPlayGroup(g)}>
+          <ListItemButton key={g.key} onClick={() => onPickGroup(g.key)}>
             <Box>
               <Typography>{g.canonical.title}</Typography>
               <Typography variant="body2">{g.canonical.artist}</Typography>

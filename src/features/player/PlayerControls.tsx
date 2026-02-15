@@ -2,22 +2,42 @@ import { Box, Button, Stack } from '@mui/material';
 import WaveProgress from '../../components/WaveProgress';
 import { usePlayerStore } from './PlayerStore';
 
-type PlayerControlsProps = {
-  onSeek: (progress: number) => void;
-};
+export default function PlayerControls() {
+  const {
+    playing,
+    play,
+    pause,
+    progress,
+    seek,
+    next,
+    prev,
+    mode,
+    toggleMode,
+    favorites,
+    trackId,
+    toggleFavorite,
+  } = usePlayerStore();
 
-export default function PlayerControls({ onSeek }: PlayerControlsProps) {
-  const { playing, setPlaying, currentMs, durationMs, next, prev } = usePlayerStore();
-  const progress = durationMs > 0 ? currentMs / durationMs : 0;
+  const isFavorite = trackId ? favorites.includes(trackId) : false;
 
   return (
-    <Box>
-      <WaveProgress progress={progress} onSeek={onSeek} />
-      <Stack direction="row" spacing={1} mt={2}>
-        <Button onClick={prev}>Prev</Button>
-        <Button onClick={() => setPlaying(!playing)}>{playing ? 'Pause' : 'Play'}</Button>
-        <Button onClick={next}>Next</Button>
-      </Stack>
+    <Box display="grid" gap={1.5}>
+      <WaveProgress progress={progress} onSeek={seek} />
+      <Box display="flex" gap={1} flexWrap="wrap">
+        <Button onClick={prev} aria-label="previous track">
+          Prev
+        </Button>
+        <Button onClick={() => (playing ? pause() : play())}>{playing ? 'Pause' : 'Play'}</Button>
+        <Button onClick={next} aria-label="next track">
+          Next
+        </Button>
+        <Button onClick={toggleMode} aria-label="repeat mode">
+          Mode: {mode}
+        </Button>
+        <Button onClick={() => toggleFavorite()} aria-label="favorite track">
+          {isFavorite ? 'Unfavorite' : 'Favorite'}
+        </Button>
+      </Box>
     </Box>
   );
 }
